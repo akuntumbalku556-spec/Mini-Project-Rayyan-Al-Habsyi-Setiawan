@@ -1,0 +1,607 @@
+/* ============================================
+   CSS Custom Properties for Theming
+   ============================================ */
+
+:root {
+    /* Light Theme Colors */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f7fa;
+    --bg-tertiary: #e8ecf1;
+    --text-primary: #1a202c;
+    --text-secondary: #4a5568;
+    --text-muted: #718096;
+    --border-color: #cbd5e0;
+    --shadow: rgba(0, 0, 0, 0.1);
+    
+    /* Accent Colors */
+    --accent-primary: #3182ce;
+    --accent-primary-hover: #2c5282;
+    --accent-success: #38a169;
+    --accent-danger: #e53e3e;
+    --accent-warning: #dd6b20;
+    
+    /* Component Colors */
+    --input-bg: #ffffff;
+    --input-border: #cbd5e0;
+    --input-focus: #3182ce;
+    --button-primary-bg: #3182ce;
+    --button-primary-text: #ffffff;
+    --button-secondary-bg: #718096;
+    --error-bg: #fed7d7;
+    --error-text: #c53030;
+    --success-bg: #c6f6d5;
+    --success-text: #22543d;
+    --budget-exceeded-bg: #fed7d7;
+    --budget-exceeded-border: #fc8181;
+    
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    
+    /* Typography */
+    --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-size-base: 16px;
+    --font-size-sm: 0.875rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.5rem;
+    --font-size-2xl: 2rem;
+    --line-height-base: 1.5;
+    
+    /* Border Radius */
+    --radius-sm: 0.25rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    
+    /* Transitions */
+    --transition-fast: 150ms ease;
+    --transition-base: 250ms ease;
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+    --bg-primary: #1a202c;
+    --bg-secondary: #2d3748;
+    --bg-tertiary: #4a5568;
+    --text-primary: #f7fafc;
+    --text-secondary: #e2e8f0;
+    --text-muted: #a0aec0;
+    --border-color: #4a5568;
+    --shadow: rgba(0, 0, 0, 0.3);
+    
+    --input-bg: #2d3748;
+    --input-border: #4a5568;
+    --button-secondary-bg: #4a5568;
+    --error-bg: #742a2a;
+    --error-text: #fc8181;
+    --success-bg: #22543d;
+    --success-text: #9ae6b4;
+    --budget-exceeded-bg: #742a2a;
+    --budget-exceeded-border: #f56565;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: var(--font-size-base);
+}
+
+body {
+    font-family: var(--font-family);
+    line-height: var(--line-height-base);
+    color: var(--text-primary);
+    background-color: var(--bg-secondary);
+    transition: background-color var(--transition-base), color var(--transition-base);
+}
+
+/* ============================================
+   App Container
+   ============================================ */
+
+.app-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    background-color: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 2px 4px var(--shadow);
+}
+
+.app-header h1 {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.theme-toggle {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    cursor: pointer;
+    font-size: var(--font-size-lg);
+    transition: all var(--transition-fast);
+}
+
+.theme-toggle:hover {
+    background: var(--bg-tertiary);
+    transform: scale(1.05);
+}
+
+.theme-toggle:focus {
+    outline: 2px solid var(--input-focus);
+    outline-offset: 2px;
+}
+
+/* ============================================
+   Balance Section
+   ============================================ */
+
+.balance-section {
+    background-color: var(--bg-primary);
+    padding: var(--spacing-xl);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 2px 4px var(--shadow);
+    margin-bottom: var(--spacing-xl);
+    text-align: center;
+}
+
+.balance-section h2 {
+    font-size: var(--font-size-lg);
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm);
+    font-weight: 500;
+}
+
+.balance-amount {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: var(--accent-primary);
+}
+
+.balance-amount.negative {
+    color: var(--accent-danger);
+}
+
+/* ============================================
+   Banners (Error/Notification)
+   ============================================ */
+
+.error-banner,
+.notification-banner {
+    display: none;
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-lg);
+    font-weight: 500;
+}
+
+.error-banner {
+    background-color: var(--error-bg);
+    color: var(--error-text);
+    border-left: 4px solid var(--accent-danger);
+}
+
+.notification-banner {
+    background-color: var(--success-bg);
+    color: var(--success-text);
+    border-left: 4px solid var(--accent-success);
+}
+
+.error-banner.visible,
+.notification-banner.visible {
+    display: block;
+}
+
+/* ============================================
+   Main Content
+   ============================================ */
+
+.main-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--spacing-xl);
+    margin-bottom: var(--spacing-xl);
+}
+
+.main-content section {
+    background-color: var(--bg-primary);
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 2px 4px var(--shadow);
+}
+
+.main-content h2 {
+    font-size: var(--font-size-xl);
+    margin-bottom: var(--spacing-lg);
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: var(--spacing-sm);
+}
+
+/* ============================================
+   Form Styles
+   ============================================ */
+
+.transaction-form,
+.category-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.form-group label {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+input[type="text"],
+input[type="number"],
+select {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 2px solid var(--input-border);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-base);
+    color: var(--text-primary);
+    background-color: var(--input-bg);
+    transition: border-color var(--transition-fast);
+}
+
+input:focus,
+select:focus {
+    outline: none;
+    border-color: var(--input-focus);
+    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+}
+
+input::placeholder {
+    color: var(--text-muted);
+}
+
+.error-message {
+    color: var(--error-text);
+    font-size: var(--font-size-sm);
+    min-height: 1.25rem;
+    display: block;
+}
+
+/* ============================================
+   Button Styles
+   ============================================ */
+
+.btn {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-align: center;
+}
+
+.btn:focus {
+    outline: 2px solid var(--input-focus);
+    outline-offset: 2px;
+}
+
+.btn-primary {
+    background-color: var(--button-primary-bg);
+    color: var(--button-primary-text);
+}
+
+.btn-primary:hover {
+    background-color: var(--accent-primary-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px var(--shadow);
+}
+
+.btn-secondary {
+    background-color: var(--button-secondary-bg);
+    color: var(--button-primary-text);
+}
+
+.btn-secondary:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    background-color: var(--accent-danger);
+    color: white;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-size-sm);
+}
+
+.btn-danger:hover {
+    opacity: 0.9;
+}
+
+/* ============================================
+   Transaction List
+   ============================================ */
+
+.transactions-section {
+    grid-column: 1 / -1;
+}
+
+.transactions-list {
+    max-height: 500px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.transaction-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md);
+    background-color: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+}
+
+.transaction-item:hover {
+    border-color: var(--accent-primary);
+    transform: translateX(4px);
+}
+
+.transaction-item.budget-exceeded {
+    background-color: var(--budget-exceeded-bg);
+    border-color: var(--budget-exceeded-border);
+}
+
+.transaction-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.transaction-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.transaction-meta {
+    display: flex;
+    gap: var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+}
+
+.transaction-amount {
+    font-weight: 700;
+    font-size: var(--font-size-lg);
+    margin-right: var(--spacing-md);
+}
+
+.transaction-amount.positive {
+    color: var(--accent-success);
+}
+
+.transaction-amount.negative {
+    color: var(--accent-danger);
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-xl);
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ============================================
+   Category Management
+   ============================================ */
+
+.category-form {
+    flex-direction: row;
+    align-items: stretch;
+}
+
+.category-form input {
+    flex: 1;
+}
+
+.category-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
+}
+
+.category-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+}
+
+/* ============================================
+   Budget Management
+   ============================================ */
+
+.budget-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.budget-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    border: 2px solid var(--border-color);
+}
+
+.budget-item.exceeded {
+    border-color: var(--budget-exceeded-border);
+    background-color: var(--budget-exceeded-bg);
+}
+
+.budget-info {
+    flex: 1;
+}
+
+.budget-category {
+    font-weight: 600;
+    margin-bottom: var(--spacing-xs);
+}
+
+.budget-amounts {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+}
+
+.budget-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+}
+
+/* ============================================
+   Chart Section
+   ============================================ */
+
+.chart-section {
+    grid-column: 1 / -1;
+}
+
+.chart-container {
+    position: relative;
+    height: 400px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#spendingChart {
+    max-height: 400px;
+}
+
+.chart-empty-message {
+    display: none;
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: var(--font-size-lg);
+}
+
+.chart-empty-message.visible {
+    display: block;
+}
+
+/* ============================================
+   Footer
+   ============================================ */
+
+.app-footer {
+    text-align: center;
+    padding: var(--spacing-lg);
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+    margin-top: auto;
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+
+@media (max-width: 768px) {
+    .app-header {
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+    
+    .app-header h1 {
+        font-size: var(--font-size-xl);
+    }
+    
+    .main-content {
+        grid-template-columns: 1fr;
+    }
+    
+    .category-form {
+        flex-direction: column;
+    }
+    
+    .transaction-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-sm);
+    }
+}
+
+/* ============================================
+   Loading State
+   ============================================ */
+
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* ============================================
+   Scrollbar Styling
+   ============================================ */
+
+.transactions-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.transactions-list::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+}
+
+.transactions-list::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+.transactions-list::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
