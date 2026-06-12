@@ -579,6 +579,184 @@ class TransactionManager {
 }
 
 // ============================================
+// Chart Renderer
+// Renders pie chart visualization of spending data
+// ============================================
+
+class ChartRenderer {
+    /**
+     * Initialize chart with canvas element
+     * @param {HTMLCanvasElement} canvasElement - Canvas element for chart
+     */
+    constructor(canvasElement) {
+        this.canvas = canvasElement;
+        this.chartInstance = null;
+    }
+    
+    /**
+     * Update chart with new spending data
+     * @param {Map} spendingByCategory - Map of category to spending amount
+     * @param {Array} exceededCategories - Array of category names that exceeded budget
+     */
+    updateChart(spendingByCategory, exceededCategories = []) {
+        // Filter to include only positive spending (Requirement 6.6)
+        const positiveSpending = new Map();
+        for (const [category, amount] of spendingByCategory) {
+            if (amount > 0) {
+                positiveSpending.set(category, amount);
+            }
+        }
+        
+        // Check if there's no spending data to display (Requirement 6.5)
+        if (positiveSpending.size === 0) {
+            this.clearChart();
+            this.showEmptyMessage();
+            return;
+        }
+        
+        // Hide empty message
+        this.hideEmptyMessage();
+        
+        // Prepare chart data
+        const labels = [];
+        const data = [];
+        const backgroundColors = [];
+        const borderColors = [];
+        
+        // Standard color palette
+        const standardColors = [
+            'rgba(255, 99, 132, 0.8)',   // Red
+            'rgba(54, 162, 235, 0.8)',   // Blue
+            'rgba(255, 206, 86, 0.8)',   // Yellow
+            'rgba(75, 192, 192, 0.8)',   // Green
+            'rgba(153, 102, 255, 0.8)',  // Purple
+            'rgba(255, 159, 64, 0.8)',   // Orange
+            'rgba(199, 199, 199, 0.8)',  // Gray
+            'rgba(83, 102, 255, 0.8)',   // Indigo
+            'rgba(255, 99, 255, 0.8)',   // Pink
+            'rgba(99, 255, 132, 0.8)'    // Light Green
+        ];
+        
+        // Color for budget exceeded categories (Requirement 7.7)
+        const exceededColor = 'rgba(220, 53, 69, 0.8)'; // Red
+        const exceededBorderColor = 'rgba(220, 53, 69, 1)';
+        
+        let colorIndex = 0;
+        
+        // Build chart data arrays
+        for (const [category, amount] of positiveSpending) {
+            labels.push(category);
+            data.push(amount);
+            
+            // Use red color for exceeded categories, standard colors otherwise
+            if (exceededCategories.includes(category)) {
+                backgroundColors.push(exceededColor);
+                borderColors.push(exceededBorderColor);
+            } else {
+                backgroundColors.push(standardColors[colorIndex % standardColors.length]);
+                borderColors.push(standardColors[colorIndex % standardColors.length].replace('0.8', '1'));
+                colorIndex++;
+            }
+        }
+        
+        // Chart configuration
+        const config = {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: backgroundColors,
+                    borderColor: borderColors,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 15,
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            // Format amounts to 2 decimal places (Requirement 6.4)
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                return `${label}: $${value.toFixed(2)}`;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        
+        // Destroy existing chart instance if it exists
+        if (this.chartInstance) {
+            this.chartInstance.destroy();
+        }
+        
+        // Create new chart instance
+        const ctx = this.canvas.getContext('2d');
+        this.chartInstance = new Chart(ctx, config);
+    }
+    
+    /**
+     * Clear chart and show empty message
+     */
+    clearChart() {
+        if (this.chartInstance) {
+            this.chartInstance.destroy();
+            this.chartInstance = null;
+        }
+    }
+    
+    /**
+     * Destroy chart instance (cleanup)
+     */
+    destroy() {
+        this.clearChart();
+    }
+    
+    /**
+     * Show empty message when no spending data
+     */
+    showEmptyMessage() {
+        const emptyMessage = document.getElementById('chartEmpty');
+        if (emptyMessage) {
+            emptyMessage.classList.add('visible');
+        }
+        
+        // Hide canvas
+        if (this.canvas) {
+            this.canvas.style.display = 'none';
+        }
+    }
+    
+    /**
+     * Hide empty message when there's spending data
+     */
+    hideEmptyMessage() {
+        const emptyMessage = document.getElementById('chartEmpty');
+        if (emptyMessage) {
+            emptyMessage.classList.remove('visible');
+        }
+        
+        // Show canvas
+        if (this.canvas) {
+            this.canvas.style.display = 'block';
+        }
+    }
+}
+
+// ============================================
 // UI Controller
 // Manages UI updates and user interactions
 // ============================================
@@ -779,6 +957,41 @@ function updateTotalBalance() {
     }
 }
 
+/**
+ * Update spending chart
+ * Updates the chart to reflect current spending distribution by category
+ * Highlights categories that have exceeded their budget limits
+ * Ensures updates complete within 200ms performance budget (Requirement 10.5)
+ */
+function updateChart() {
+    if (!chartRenderer) {
+        return;
+    }
+    
+    // Performance monitoring - start timer
+    const startTime = performance.now();
+    
+    // Get spending by category (positive amounts only)
+    const spendingByCategory = TransactionManager.getSpendingByCategory(appState.transactions);
+    
+    // Get exceeded categories for highlighting
+    const exceededCategories = BudgetManager.getExceededCategories(spendingByCategory, appState.budgetLimits);
+    
+    // Update chart with new data
+    chartRenderer.updateChart(spendingByCategory, exceededCategories);
+    
+    // Performance monitoring - end timer
+    const endTime = performance.now();
+    const duration = endTime - startTime;
+    
+    // Log performance metric and warn if exceeds budget
+    if (duration > 200) {
+        console.warn(`Chart update took ${duration.toFixed(2)}ms, exceeding 200ms budget`);
+    } else {
+        console.log(`Chart update completed in ${duration.toFixed(2)}ms`);
+    }
+}
+
 // ============================================
 // Application Initialization
 // ============================================
@@ -791,6 +1004,9 @@ let appState = {
     themeMode: 'light',
     isStorageAvailable: false
 };
+
+// Chart renderer instance (initialized after DOM ready)
+let chartRenderer = null;
 
 /**
  * Initialize application
@@ -817,12 +1033,19 @@ function initApp() {
         }
     }
     
+    // Initialize chart renderer
+    const chartCanvas = document.getElementById('spendingChart');
+    if (chartCanvas) {
+        chartRenderer = new ChartRenderer(chartCanvas);
+    }
+    
     // Initialize UI components
     renderTransactionList();
     populateCategoryDropdown();
     renderCategoryManagement();
     renderBudgetManagement();
     updateTotalBalance();
+    updateChart();
     
     // Check for exceeded budgets on page load (Requirement 7.9)
     checkAndNotifyBudgetExceeded();
@@ -1093,6 +1316,7 @@ function handleTransactionSubmit(event) {
     // Update UI within 100ms (synchronous calls are well under 100ms)
     renderTransactionList();
     updateTotalBalance();
+    updateChart();
     
     // Check for exceeded budgets and show notifications (Requirements 7.7, 7.8)
     checkAndNotifyBudgetExceeded();
@@ -1147,6 +1371,7 @@ function handleTransactionDelete(event) {
         // Synchronous calls are well under 100ms
         renderTransactionList();
         updateTotalBalance();
+        updateChart();
         
         // Check for exceeded budgets and show notifications (Requirements 7.7, 7.8)
         checkAndNotifyBudgetExceeded();
@@ -1265,6 +1490,7 @@ function handleSetBudget() {
     
     // Update UI
     renderBudgetManagement();
+    updateChart();
     
     // Clear inputs
     budgetCategorySelect.value = '';
@@ -1312,6 +1538,7 @@ function handleBudgetDelete(event) {
     
     // Update UI
     renderBudgetManagement();
+    updateChart();
     
     // Show success notification
     if (saveSuccess || !appState.isStorageAvailable) {

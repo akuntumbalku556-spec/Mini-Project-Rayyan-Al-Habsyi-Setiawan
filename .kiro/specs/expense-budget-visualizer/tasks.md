@@ -168,13 +168,13 @@ The implementation follows an incremental approach where each task builds on pre
     - Initialize Chart.js instance with basic configuration
     - _Requirements: 6.1_
 
-  - [ ] 10.2 Implement Chart Renderer
+  - [x] 10.2 Implement Chart Renderer
     - Write `ChartRenderer` class with `updateChart()`, `clearChart()`, and `destroy()` methods
     - Configure pie chart to display category names and amounts
     - Format amounts to 2 decimal places in chart labels
     - _Requirements: 6.1, 6.4_
 
-  - [ ] 10.3 Implement spending distribution chart updates
+  - [x] 10.3 Implement spending distribution chart updates
     - Calculate spending by category using TransactionManager.getSpendingByCategory()
     - Filter to include only categories with positive spending
     - Update chart when transactions are added or deleted
