@@ -237,7 +237,7 @@ The implementation follows an incremental approach where each task builds on pre
     - Cache DOM element references for performance
     - _Requirements: 2.3, 3.4, 10.2, 10.3_
 
-  - [-] 13.2 Implement visual feedback for all user interactions
+  - [ ] 13.2 Implement visual feedback for all user interactions
     - Add hover states for all buttons
     - Add active/pressed states for buttons
     - Show loading indicators for operations >100ms
@@ -262,7 +262,7 @@ The implementation follows an incremental approach where each task builds on pre
 
 
 - [ ] 14. Performance optimization
-  - [-] 14.1 Optimize DOM updates for performance
+  - [ ] 14.1 Optimize DOM updates for performance
     - Use DocumentFragment for batch insertions in transaction list
     - Update only changed elements instead of re-rendering entire list
     - Cache DOM element references in UI Controller
