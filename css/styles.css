@@ -94,6 +94,8 @@
 
 html {
     font-size: var(--font-size-base);
+    /* Add smooth transitions for theme switching (Requirement 8.2) */
+    transition: background-color var(--transition-base), color var(--transition-base);
 }
 
 body {
@@ -101,7 +103,11 @@ body {
     line-height: var(--line-height-base);
     color: var(--text-primary);
     background-color: var(--bg-secondary);
-    transition: background-color var(--transition-base), color var(--transition-base);
+    /* Ensure all color properties transition smoothly (Requirement 8.2) */
+    transition: 
+        background-color var(--transition-base), 
+        color var(--transition-base),
+        border-color var(--transition-base);
 }
 
 /* ============================================
@@ -115,6 +121,8 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    /* Add smooth transitions for theme switching */
+    transition: all var(--transition-base);
 }
 
 /* ============================================
@@ -130,12 +138,19 @@ body {
     background-color: var(--bg-primary);
     border-radius: var(--radius-lg);
     box-shadow: 0 2px 4px var(--shadow);
+    /* Add smooth transitions for theme switching */
+    transition: 
+        background-color var(--transition-base),
+        box-shadow var(--transition-base),
+        border-color var(--transition-base);
 }
 
 .app-header h1 {
     font-size: var(--font-size-2xl);
     font-weight: 700;
     color: var(--text-primary);
+    /* Smooth color transition for theme switching */
+    transition: color var(--transition-base);
 }
 
 .theme-toggle {
@@ -145,17 +160,34 @@ body {
     padding: var(--spacing-sm) var(--spacing-md);
     cursor: pointer;
     font-size: var(--font-size-lg);
-    transition: all var(--transition-fast);
+    /* Enhanced transitions for smooth theme switching (Requirement 8.2) */
+    transition: 
+        all var(--transition-fast),
+        background-color var(--transition-base),
+        border-color var(--transition-base),
+        transform var(--transition-fast);
 }
 
 .theme-toggle:hover {
     background: var(--bg-tertiary);
     transform: scale(1.05);
+    /* Add subtle shadow on hover */
+    box-shadow: 0 2px 4px var(--shadow);
 }
 
 .theme-toggle:focus {
     outline: 2px solid var(--input-focus);
     outline-offset: 2px;
+}
+
+/* Ensure theme icon transitions smoothly */
+.theme-toggle .theme-icon {
+    display: inline-block;
+    transition: transform var(--transition-fast);
+}
+
+.theme-toggle:active .theme-icon {
+    transform: rotate(180deg);
 }
 
 /* ============================================
@@ -245,6 +277,11 @@ body {
     padding: var(--spacing-lg);
     border-radius: var(--radius-lg);
     box-shadow: 0 2px 4px var(--shadow);
+    /* Add smooth transitions for theme switching (Requirement 8.2) */
+    transition: 
+        background-color var(--transition-base),
+        box-shadow var(--transition-base),
+        border-color var(--transition-base);
 }
 
 .main-content h2 {

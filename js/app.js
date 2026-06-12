@@ -434,6 +434,74 @@ class BudgetManager {
 }
 
 // ============================================
+// Theme Manager
+// Manages theme switching and persistence
+// ============================================
+
+class ThemeManager {
+    /**
+     * Toggle between light and dark themes
+     * @param {string} currentTheme - Current theme mode ('light' or 'dark')
+     * @returns {string} New theme mode
+     */
+    static toggleTheme(currentTheme) {
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        this.applyTheme(newTheme);
+        return newTheme;
+    }
+    
+    /**
+     * Apply theme by setting data-theme attribute on root element
+     * Optimized for 100ms performance requirement (Requirement 8.2)
+     * @param {string} theme - Theme mode ('light' or 'dark')
+     */
+    static applyTheme(theme) {
+        // Start performance measurement
+        const startTime = performance.now();
+        
+        const html = document.documentElement;
+        
+        // Set data-theme attribute for CSS custom properties (Requirements 8.2, 8.3)
+        // This triggers CSS custom property changes which are highly optimized
+        html.setAttribute('data-theme', theme);
+        
+        // Force style recalculation to ensure immediate visual change
+        // This ensures the theme change is visible within 100ms
+        html.offsetHeight; // Trigger reflow
+        
+        // Log performance in development
+        const applyTime = performance.now() - startTime;
+        if (applyTime > 50) { // Log if approaching 100ms limit
+            console.warn(`Theme application took ${applyTime.toFixed(2)}ms`);
+        }
+    }
+    
+    /**
+     * Get system theme preference using media query
+     * @returns {string} System theme preference ('light' or 'dark')
+     */
+    static getSystemTheme() {
+        // Check for dark mode preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return 'dark';
+        }
+        
+        // Default to light mode
+        return 'light';
+    }
+    
+    /**
+     * Load theme preference from storage or fall back to system preference
+     * @param {string|null} savedTheme - Saved theme preference from storage
+     * @returns {string} Theme to apply ('light' or 'dark')
+     */
+    static loadTheme(savedTheme) {
+        // Use saved theme if available, otherwise detect system preference
+        return savedTheme || this.getSystemTheme();
+    }
+}
+
+// ============================================
 // Transaction Manager
 // Manages transaction CRUD operations and business logic
 // ============================================
@@ -758,25 +826,231 @@ class ChartRenderer {
 
 // ============================================
 // UI Controller
-// Manages UI updates and user interactions
+// Coordinates all UI updates and user interactions
 // ============================================
 
 class UIController {
+    // Cached DOM element references for performance
+    static elements = {};
+    
+    // Debounce timers for expensive operations
+    static debounceTimers = {};
+    
+    /**
+     * Initialize UI Controller and cache DOM element references
+     * Sets up all event listeners and caches frequently accessed elements
+     * Requirements: 2.3, 3.4, 10.2, 10.3
+     */
+    static init() {
+        // Cache DOM element references for performance (Requirements 10.2, 10.3)
+        this.cacheElements();
+        
+        // Set up all event listeners
+        this.setupEventListeners();
+        
+        // Initialize theme
+        this.initializeTheme();
+        
+        console.log('UIController initialized with cached elements and event listeners');
+    }
+    
+    /**
+     * Cache frequently accessed DOM elements for performance
+     * Reduces DOM queries and improves update speed
+     */
+    static cacheElements() {
+        const elementsToCache = [
+            'errorBanner',
+            'notificationBanner', 
+            'totalBalance',
+            'transactionsList',
+            'transactionForm',
+            'categoryList',
+            'budgetList',
+            'themeToggle',
+            'spendingChart',
+            'chartEmpty'
+        ];
+        
+        // Cache elements
+        elementsToCache.forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                this.elements[id] = element;
+            }
+        });
+        
+        // Cache form input elements
+        const formInputs = ['itemName', 'amount', 'category', 'newCategoryName', 'budgetCategory', 'budgetAmount'];
+        formInputs.forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                this.elements[id] = element;
+            }
+        });
+        
+        // Cache error message elements
+        const errorElements = document.querySelectorAll('.error-message');
+        this.elements.errorMessages = Array.from(errorElements);
+    }
+    
+    /**
+     * Set up all event listeners for the application
+     * Centralizes event handling for better coordination
+     */
+    static setupEventListeners() {
+        // Theme toggle button
+        if (this.elements.themeToggle) {
+            this.elements.themeToggle.addEventListener('click', this.handleThemeToggle.bind(this));
+        }
+        
+        // Transaction form submission
+        if (this.elements.transactionForm) {
+            this.elements.transactionForm.addEventListener('submit', this.handleTransactionSubmit.bind(this));
+        }
+        
+        // Transaction delete buttons (using event delegation)
+        if (this.elements.transactionsList) {
+            this.elements.transactionsList.addEventListener('click', this.handleTransactionDelete.bind(this));
+        }
+        
+        // Add category button
+        const addCategoryBtn = document.getElementById('addCategoryBtn');
+        if (addCategoryBtn) {
+            addCategoryBtn.addEventListener('click', this.handleAddCategory.bind(this));
+        }
+        
+        // Category input - allow Enter key to add category
+        if (this.elements.newCategoryName) {
+            this.elements.newCategoryName.addEventListener('keypress', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    this.handleAddCategory();
+                }
+            });
+        }
+        
+        // Budget list event delegation for buttons
+        if (this.elements.budgetList) {
+            this.elements.budgetList.addEventListener('click', this.handleBudgetActions.bind(this));
+        }
+    }
+    
+    /**
+     * Render transaction list with optimized DOM updates
+     * Updates only when necessary and uses DocumentFragment for performance
+     * Requirements: 2.1, 2.2, 2.3, 2.5
+     */
+    static renderTransactionList(transactions = appState.transactions) {
+        if (!this.elements.transactionsList) {
+            return;
+        }
+        
+        // Get transactions sorted in reverse chronological order (newest first)
+        const sortedTransactions = TransactionManager.getTransactionsSorted(transactions);
+        
+        // Check if list is empty (Requirement 2.5)
+        if (sortedTransactions.length === 0) {
+            this.elements.transactionsList.innerHTML = 
+                '<div class="empty-state">No transactions yet. Add your first expense to get started.</div>';
+            return;
+        }
+        
+        // Get exceeded categories for visual indicators (Requirement 7.9)
+        const spendingByCategory = TransactionManager.getSpendingByCategory(transactions);
+        const exceededCategories = BudgetManager.getExceededCategories(spendingByCategory, appState.budgetLimits);
+        
+        // Use DocumentFragment for efficient batch DOM updates (Performance optimization)
+        const fragment = document.createDocumentFragment();
+        
+        // Build transaction items
+        sortedTransactions.forEach(transaction => {
+            const transactionElement = this.createTransactionElement(transaction, exceededCategories);
+            fragment.appendChild(transactionElement);
+        });
+        
+        // Single DOM update for performance
+        this.elements.transactionsList.innerHTML = '';
+        this.elements.transactionsList.appendChild(fragment);
+    }
+    
+    /**
+     * Create individual transaction element
+     * @param {Object} transaction - Transaction object
+     * @param {Array} exceededCategories - Categories that exceeded budget
+     * @returns {HTMLElement} Transaction element
+     */
+    static createTransactionElement(transaction, exceededCategories) {
+        const div = document.createElement('div');
+        div.className = 'transaction-item';
+        div.dataset.id = transaction.id;
+        
+        // Apply visual indicator if category is exceeded (Requirement 7.9)
+        if (exceededCategories.includes(transaction.category)) {
+            div.classList.add('budget-exceeded');
+        }
+        
+        const amountClass = transaction.amount >= 0 ? 'positive' : 'negative';
+        const formattedAmount = this.formatAmount(transaction.amount);
+        const formattedTimestamp = this.formatTimestamp(transaction.timestamp);
+        
+        div.innerHTML = `
+            <div class="transaction-details">
+                <div class="transaction-name">${this.escapeHtml(transaction.itemName)}</div>
+                <div class="transaction-meta">
+                    <span class="transaction-category">${this.escapeHtml(transaction.category)}</span>
+                    <span class="transaction-timestamp">${formattedTimestamp}</span>
+                </div>
+            </div>
+            <div class="transaction-amount ${amountClass}">$${formattedAmount}</div>
+            <button class="btn btn-danger transaction-delete" data-id="${transaction.id}" aria-label="Delete transaction">Delete</button>
+        `;
+        
+        return div;
+    }
+    
+    /**
+     * Update total balance display
+     * Updates balance within 100ms performance requirement (Requirements 4.1-4.6)
+     */
+    static updateTotalBalance(transactions = appState.transactions) {
+        if (!this.elements.totalBalance) {
+            return;
+        }
+        
+        // Calculate total balance using TransactionManager
+        const balance = TransactionManager.calculateTotalBalance(transactions);
+        
+        // Format balance to 2 decimal places (Requirements 4.1, 4.2)
+        const formattedBalance = balance.toFixed(2);
+        
+        // Update DOM element
+        this.elements.totalBalance.textContent = `$${formattedBalance}`;
+        
+        // Apply or remove negative class based on balance (Requirement 4.6)
+        if (balance < 0) {
+            this.elements.totalBalance.classList.add('negative');
+        } else {
+            this.elements.totalBalance.classList.remove('negative');
+        }
+    }
+    
     /**
      * Show error message
      * @param {string} message - Error message to display
      */
     static showError(message) {
-        const errorBanner = document.getElementById('errorBanner');
-        if (errorBanner) {
-            errorBanner.textContent = message;
-            errorBanner.classList.add('visible');
-            
-            // Auto-hide after 5 seconds
-            setTimeout(() => {
-                errorBanner.classList.remove('visible');
-            }, 5000);
+        if (!this.elements.errorBanner) {
+            return;
         }
+        
+        this.elements.errorBanner.textContent = message;
+        this.elements.errorBanner.classList.add('visible');
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            this.elements.errorBanner.classList.remove('visible');
+        }, 5000);
     }
     
     /**
@@ -785,23 +1059,50 @@ class UIController {
      * @param {string} type - Notification type ('success' or 'warning')
      */
     static showNotification(message, type = 'success') {
-        const notificationBanner = document.getElementById('notificationBanner');
-        if (notificationBanner) {
-            notificationBanner.textContent = message;
-            
-            // Remove existing type classes
-            notificationBanner.classList.remove('success', 'warning');
-            
-            // Add type-specific class
-            notificationBanner.classList.add(type);
-            notificationBanner.classList.add('visible');
-            
-            // Auto-hide after 3 seconds (or 5 seconds for warnings)
-            const duration = type === 'warning' ? 5000 : 3000;
-            setTimeout(() => {
-                notificationBanner.classList.remove('visible');
-            }, duration);
+        if (!this.elements.notificationBanner) {
+            return;
         }
+        
+        this.elements.notificationBanner.textContent = message;
+        
+        // Remove existing type classes
+        this.elements.notificationBanner.classList.remove('success', 'warning');
+        
+        // Add type-specific class
+        this.elements.notificationBanner.classList.add(type);
+        this.elements.notificationBanner.classList.add('visible');
+        
+        // Auto-hide after 3 seconds (or 5 seconds for warnings)
+        const duration = type === 'warning' ? 5000 : 3000;
+        setTimeout(() => {
+            this.elements.notificationBanner.classList.remove('visible');
+        }, duration);
+    }
+    
+    /**
+     * Clear form inputs
+     * Clears the transaction form after successful submission
+     */
+    static clearForm() {
+        if (this.elements.transactionForm) {
+            this.elements.transactionForm.reset();
+        }
+        
+        // Clear category form
+        if (this.elements.newCategoryName) {
+            this.elements.newCategoryName.value = '';
+        }
+        
+        // Clear budget form
+        if (this.elements.budgetCategory) {
+            this.elements.budgetCategory.value = '';
+        }
+        if (this.elements.budgetAmount) {
+            this.elements.budgetAmount.value = '';
+        }
+        
+        // Clear any field errors
+        this.clearFieldErrors();
     }
     
     /**
@@ -820,175 +1121,453 @@ class UIController {
      * Clear all field errors
      */
     static clearFieldErrors() {
-        const errorElements = document.querySelectorAll('.error-message');
-        errorElements.forEach(el => {
-            el.textContent = '';
+        if (this.elements.errorMessages) {
+            this.elements.errorMessages.forEach(el => {
+                el.textContent = '';
+            });
+        }
+    }
+    
+    /**
+     * Debounced chart update for performance
+     * Ensures chart updates don't happen too frequently (Requirements 10.2, 10.3)
+     * @param {number} delay - Debounce delay in milliseconds (default: 200ms)
+     */
+    static updateChartDebounced(delay = 200) {
+        // Clear existing timer
+        if (this.debounceTimers.chartUpdate) {
+            clearTimeout(this.debounceTimers.chartUpdate);
+        }
+        
+        // Set new timer
+        this.debounceTimers.chartUpdate = setTimeout(() => {
+            this.updateChart();
+        }, delay);
+    }
+    
+    /**
+     * Update spending chart immediately
+     * Direct chart update without debouncing
+     */
+    static updateChart() {
+        if (!chartRenderer) {
+            return;
+        }
+        
+        // Performance monitoring - start timer
+        const startTime = performance.now();
+        
+        // Get spending by category (positive amounts only)
+        const spendingByCategory = TransactionManager.getSpendingByCategory(appState.transactions);
+        
+        // Get exceeded categories for highlighting
+        const exceededCategories = BudgetManager.getExceededCategories(spendingByCategory, appState.budgetLimits);
+        
+        // Update chart with new data
+        chartRenderer.updateChart(spendingByCategory, exceededCategories);
+        
+        // Performance monitoring - end timer
+        const endTime = performance.now();
+        const duration = endTime - startTime;
+        
+        // Log performance metric and warn if exceeds budget (Requirement 10.5)
+        if (duration > 200) {
+            console.warn(`Chart update took ${duration.toFixed(2)}ms, exceeding 200ms budget`);
+        }
+    }
+    
+    /**
+     * Coordinate all UI updates after transaction changes
+     * Centralizes UI update coordination (Requirements 2.3, 3.4, 10.2, 10.3)
+     */
+    static updateAfterTransactionChange() {
+        // Update UI components in order of priority
+        this.renderTransactionList();
+        this.updateTotalBalance();
+        
+        // Use debounced chart update for performance
+        this.updateChartDebounced();
+        
+        // Check for exceeded budgets and show notifications
+        this.checkAndNotifyBudgetExceeded();
+    }
+    
+    /**
+     * Check for exceeded budgets and display notifications
+     */
+    static checkAndNotifyBudgetExceeded() {
+        // Get spending by category
+        const spendingByCategory = TransactionManager.getSpendingByCategory(appState.transactions);
+        
+        // Get exceeded categories
+        const exceededCategories = BudgetManager.getExceededCategories(spendingByCategory, appState.budgetLimits);
+        
+        // Display notification for each exceeded category (Requirements 7.7, 7.8)
+        exceededCategories.forEach(category => {
+            const spending = spendingByCategory.get(category);
+            const limit = appState.budgetLimits[category];
+            const message = BudgetManager.formatBudgetAlert(category, spending, limit);
+            this.showNotification(message, 'warning');
         });
     }
-}
-
-// ============================================
-// Transaction List Renderer
-// Handles rendering of transaction list UI
-// ============================================
-
-/**
- * Format timestamp to readable format
- * @param {string} isoTimestamp - ISO 8601 timestamp
- * @returns {string} Formatted date and time string
- */
-function formatTimestamp(isoTimestamp) {
-    const date = new Date(isoTimestamp);
     
-    // Format: "Jan 15, 2024, 3:45 PM"
-    const options = {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-    };
+    // ============================================
+    // Event Handlers
+    // ============================================
     
-    return date.toLocaleString('en-US', options);
-}
-
-/**
- * Format amount to currency string with 2 decimal places
- * @param {number} amount - Amount to format
- * @returns {string} Formatted amount string
- */
-function formatAmount(amount) {
-    const sign = amount >= 0 ? '+' : '';
-    return sign + amount.toFixed(2);
-}
-
-/**
- * Render the transaction list
- * Updates the transaction list UI based on current appState.transactions
- */
-function renderTransactionList() {
-    const transactionsList = document.getElementById('transactionsList');
-    
-    if (!transactionsList) {
-        return;
-    }
-    
-    // Get transactions sorted in reverse chronological order (newest first)
-    const sortedTransactions = TransactionManager.getTransactionsSorted(appState.transactions);
-    
-    // Check if list is empty
-    if (sortedTransactions.length === 0) {
-        transactionsList.innerHTML = '<div class="empty-state">No transactions yet. Add your first expense to get started.</div>';
-        return;
-    }
-    
-    // Get exceeded categories for visual indicators (Requirement 7.9)
-    const spendingByCategory = TransactionManager.getSpendingByCategory(appState.transactions);
-    const exceededCategories = BudgetManager.getExceededCategories(spendingByCategory, appState.budgetLimits);
-    
-    // Build HTML for transaction items
-    let html = '';
-    sortedTransactions.forEach(transaction => {
-        const amountClass = transaction.amount >= 0 ? 'positive' : 'negative';
-        const formattedAmount = formatAmount(transaction.amount);
-        const formattedTimestamp = formatTimestamp(transaction.timestamp);
+    /**
+     * Handle theme toggle button click
+     */
+    static handleThemeToggle(event) {
+        event.preventDefault();
         
-        // Apply visual indicator if category is exceeded (Requirement 7.9)
-        const isExceeded = exceededCategories.includes(transaction.category);
-        const exceededClass = isExceeded ? 'budget-exceeded' : '';
+        // Record start time for performance measurement (Requirement 8.2: within 100ms)
+        const startTime = performance.now();
         
-        html += `
-            <div class="transaction-item ${exceededClass}" data-id="${transaction.id}">
-                <div class="transaction-details">
-                    <div class="transaction-name">${escapeHtml(transaction.itemName)}</div>
-                    <div class="transaction-meta">
-                        <span class="transaction-category">${escapeHtml(transaction.category)}</span>
-                        <span class="transaction-timestamp">${formattedTimestamp}</span>
-                    </div>
-                </div>
-                <div class="transaction-amount ${amountClass}">$${formattedAmount}</div>
-                <button class="btn btn-danger transaction-delete" data-id="${transaction.id}" aria-label="Delete transaction">Delete</button>
-            </div>
-        `;
-    });
-    
-    transactionsList.innerHTML = html;
-}
-
-/**
- * Escape HTML to prevent XSS
- * @param {string} text - Text to escape
- * @returns {string} Escaped text
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-/**
- * Update total balance display
- * Updates the balance display element with the current total balance
- * Applies negative class styling when balance is negative
- */
-function updateTotalBalance() {
-    const totalBalanceElement = document.getElementById('totalBalance');
-    
-    if (!totalBalanceElement) {
-        return;
+        // Toggle theme (Requirements 8.1, 8.2)
+        const newTheme = ThemeManager.toggleTheme(appState.themeMode);
+        appState.themeMode = newTheme;
+        
+        // Update theme icon immediately
+        this.updateThemeIcon(newTheme);
+        
+        // Measure theme application time
+        const themeApplyTime = performance.now() - startTime;
+        
+        // Save to storage (Requirement 8.4)
+        if (appState.isStorageAvailable) {
+            const saveSuccess = StorageManager.saveState(appState);
+            if (!saveSuccess) {
+                // Theme still applies for this session even if save failed (Requirement 8.5)
+                this.showError('Failed to save theme preference. Theme will reset on page reload.');
+            }
+        }
+        
+        // Log performance for verification
+        if (themeApplyTime > 100) {
+            console.warn(`Theme toggle took ${themeApplyTime.toFixed(2)}ms - exceeds 100ms requirement`);
+        }
     }
     
-    // Calculate total balance using TransactionManager
-    const balance = TransactionManager.calculateTotalBalance(appState.transactions);
-    
-    // Format balance to 2 decimal places with proper sign
-    // For negative numbers, the minus sign will be included automatically by toFixed
-    const formattedBalance = balance.toFixed(2);
-    
-    // Update DOM element
-    totalBalanceElement.textContent = `$${formattedBalance}`;
-    
-    // Apply or remove negative class based on balance
-    if (balance < 0) {
-        totalBalanceElement.classList.add('negative');
-    } else {
-        totalBalanceElement.classList.remove('negative');
+    /**
+     * Handle transaction form submission
+     */
+    static handleTransactionSubmit(event) {
+        event.preventDefault();
+        
+        // Clear previous errors
+        this.clearFieldErrors();
+        
+        // Get form values
+        const itemName = this.elements.itemName?.value || '';
+        const amount = this.elements.amount?.value || '';
+        const category = this.elements.category?.value || '';
+        
+        // Validate inputs
+        const validation = Validator.validateTransaction(itemName, amount, category);
+        if (!validation.isValid) {
+            this.showFieldError(validation.field, validation.errorMessage);
+            return;
+        }
+        
+        // Create and add transaction
+        const numAmount = parseFloat(amount);
+        const newTransaction = TransactionManager.addTransaction(itemName, numAmount, category);
+        appState.transactions.push(newTransaction);
+        
+        // Save to storage and handle errors gracefully
+        let saveSuccess = true;
+        if (appState.isStorageAvailable) {
+            saveSuccess = StorageManager.saveState(appState);
+            if (!saveSuccess) {
+                this.showError('Failed to save transaction to storage. Transaction is available for this session only.');
+            }
+        }
+        
+        // Update UI (coordinated updates)
+        this.updateAfterTransactionChange();
+        
+        // Clear form
+        this.clearForm();
+        
+        // Show success notification
+        if (saveSuccess || !appState.isStorageAvailable) {
+            this.showNotification('Transaction added successfully');
+        }
     }
-}
-
-/**
- * Update spending chart
- * Updates the chart to reflect current spending distribution by category
- * Highlights categories that have exceeded their budget limits
- * Ensures updates complete within 200ms performance budget (Requirement 10.5)
- */
-function updateChart() {
-    if (!chartRenderer) {
-        return;
+    
+    /**
+     * Handle transaction deletion (event delegation)
+     */
+    static handleTransactionDelete(event) {
+        // Check if delete button was clicked
+        if (!event.target.classList.contains('transaction-delete')) {
+            return;
+        }
+        
+        const transactionId = event.target.getAttribute('data-id');
+        if (!transactionId) {
+            return;
+        }
+        
+        // Show confirmation dialog (Requirement 3.2)
+        const confirmed = window.confirm('Delete this transaction?');
+        
+        // Cancel flow - retain transaction (Requirement 3.5)
+        if (!confirmed) {
+            return;
+        }
+        
+        // Confirm flow - delete transaction (Requirements 3.3, 3.4)
+        const success = TransactionManager.deleteTransaction(transactionId, appState.transactions);
+        
+        if (success) {
+            // Save to storage and handle errors gracefully (Requirement 3.8)
+            let saveSuccess = true;
+            if (appState.isStorageAvailable) {
+                saveSuccess = StorageManager.saveState(appState);
+                if (!saveSuccess) {
+                    this.showError('Failed to save deletion to storage. Change is available for this session only.');
+                }
+            }
+            
+            // Update UI (coordinated updates)
+            this.updateAfterTransactionChange();
+            
+            // Show success notification
+            if (saveSuccess || !appState.isStorageAvailable) {
+                this.showNotification('Transaction deleted successfully');
+            }
+        } else {
+            this.showError('Failed to delete transaction');
+        }
     }
     
-    // Performance monitoring - start timer
-    const startTime = performance.now();
+    /**
+     * Handle adding a new category
+     */
+    static handleAddCategory() {
+        const categoryError = document.getElementById('categoryManagementError');
+        
+        if (!this.elements.newCategoryName || !categoryError) {
+            return;
+        }
+        
+        // Clear previous error
+        categoryError.textContent = '';
+        
+        // Get input value
+        const categoryName = this.elements.newCategoryName.value;
+        
+        // Check if limit is reached (Requirement 5.9)
+        if (CategoryManager.isLimitReached(appState.categories)) {
+            categoryError.textContent = 'Category limit reached (50 maximum)';
+            return;
+        }
+        
+        // Validate category name (Requirements 5.3, 5.4, 5.8)
+        const validation = Validator.validateCategory(categoryName, appState.categories);
+        if (!validation.isValid) {
+            categoryError.textContent = validation.errorMessage;
+            return;
+        }
+        
+        // Add category (Requirement 5.2)
+        appState.categories = CategoryManager.addCategory(validation.sanitizedName, appState.categories);
+        
+        // Save to storage (Requirement 5.5)
+        let saveSuccess = true;
+        if (appState.isStorageAvailable) {
+            saveSuccess = StorageManager.saveState(appState);
+            if (!saveSuccess) {
+                this.showError('Failed to save category to storage. Category is available for this session only.');
+            }
+        }
+        
+        // Update UI (Requirement 5.6)
+        populateCategoryDropdown();
+        renderCategoryManagement();
+        renderBudgetManagement();
+        
+        // Clear input
+        this.elements.newCategoryName.value = '';
+        
+        // Show success notification
+        if (saveSuccess || !appState.isStorageAvailable) {
+            this.showNotification(`Category "${validation.sanitizedName}" added successfully`);
+        }
+    }
     
-    // Get spending by category (positive amounts only)
-    const spendingByCategory = TransactionManager.getSpendingByCategory(appState.transactions);
+    /**
+     * Handle budget management actions (event delegation)
+     */
+    static handleBudgetActions(event) {
+        // Handle delete button clicks
+        if (event.target.classList.contains('budget-delete')) {
+            this.handleBudgetDelete(event);
+        }
+        
+        // Handle set budget button clicks
+        if (event.target && event.target.id === 'setBudgetBtn') {
+            this.handleSetBudget();
+        }
+    }
     
-    // Get exceeded categories for highlighting
-    const exceededCategories = BudgetManager.getExceededCategories(spendingByCategory, appState.budgetLimits);
+    /**
+     * Handle setting or updating a budget limit
+     */
+    static handleSetBudget() {
+        const budgetError = document.getElementById('budgetError');
+        
+        if (!this.elements.budgetCategory || !this.elements.budgetAmount || !budgetError) {
+            return;
+        }
+        
+        // Clear previous error
+        budgetError.textContent = '';
+        
+        // Get values
+        const category = this.elements.budgetCategory.value;
+        const amount = this.elements.budgetAmount.value;
+        
+        // Validate category selection
+        if (!category || category.trim() === '') {
+            budgetError.textContent = 'Please select a category';
+            return;
+        }
+        
+        // Validate budget limit amount (Requirements 7.2, 7.3)
+        const validation = Validator.validateBudgetLimit(amount);
+        if (!validation.isValid) {
+            budgetError.textContent = validation.errorMessage;
+            return;
+        }
+        
+        // Set budget limit (Requirements 7.1, 7.5)
+        const numAmount = parseFloat(amount);
+        appState.budgetLimits = BudgetManager.setBudgetLimit(category, numAmount, appState.budgetLimits);
+        
+        // Save to storage (Requirement 7.4)
+        let saveSuccess = true;
+        if (appState.isStorageAvailable) {
+            saveSuccess = StorageManager.saveState(appState);
+            if (!saveSuccess) {
+                this.showError('Failed to save budget limit to storage. Limit is available for this session only.');
+            }
+        }
+        
+        // Update UI
+        renderBudgetManagement();
+        this.updateChart();
+        
+        // Clear inputs
+        this.elements.budgetCategory.value = '';
+        this.elements.budgetAmount.value = '';
+        
+        // Show success notification
+        if (saveSuccess || !appState.isStorageAvailable) {
+            this.showNotification(`Budget limit set for ${category}: $${numAmount.toFixed(2)}`);
+        }
+    }
     
-    // Update chart with new data
-    chartRenderer.updateChart(spendingByCategory, exceededCategories);
+    /**
+     * Handle deleting a budget limit
+     */
+    static handleBudgetDelete(event) {
+        const category = event.target.getAttribute('data-category');
+        if (!category) {
+            return;
+        }
+        
+        // Show confirmation dialog
+        const confirmed = window.confirm(`Delete budget limit for ${category}?`);
+        
+        if (!confirmed) {
+            return;
+        }
+        
+        // Delete budget limit (Requirement 7.6)
+        appState.budgetLimits = BudgetManager.deleteBudgetLimit(category, appState.budgetLimits);
+        
+        // Save to storage
+        let saveSuccess = true;
+        if (appState.isStorageAvailable) {
+            saveSuccess = StorageManager.saveState(appState);
+            if (!saveSuccess) {
+                this.showError('Failed to save deletion to storage. Change is available for this session only.');
+            }
+        }
+        
+        // Update UI
+        renderBudgetManagement();
+        this.updateChart();
+        
+        // Show success notification
+        if (saveSuccess || !appState.isStorageAvailable) {
+            this.showNotification(`Budget limit deleted for ${category}`);
+        }
+    }
     
-    // Performance monitoring - end timer
-    const endTime = performance.now();
-    const duration = endTime - startTime;
+    // ============================================
+    // Utility Methods
+    // ============================================
     
-    // Log performance metric and warn if exceeds budget
-    if (duration > 200) {
-        console.warn(`Chart update took ${duration.toFixed(2)}ms, exceeding 200ms budget`);
-    } else {
-        console.log(`Chart update completed in ${duration.toFixed(2)}ms`);
+    /**
+     * Initialize theme on app startup
+     */
+    static initializeTheme() {
+        // Apply saved theme or default to light
+        const themeToApply = ThemeManager.loadTheme(appState.themeMode);
+        appState.themeMode = themeToApply;
+        ThemeManager.applyTheme(themeToApply);
+        this.updateThemeIcon(themeToApply);
+    }
+    
+    /**
+     * Update theme toggle button icon
+     */
+    static updateThemeIcon(theme) {
+        const themeIcon = document.querySelector('#themeToggle .theme-icon');
+        if (themeIcon) {
+            // Use sun icon for light theme, moon icon for dark theme
+            themeIcon.textContent = theme === 'light' ? '🌙' : '☀️';
+        }
+    }
+    
+    /**
+     * Format timestamp to readable format
+     */
+    static formatTimestamp(isoTimestamp) {
+        const date = new Date(isoTimestamp);
+        
+        // Format: "Jan 15, 2024, 3:45 PM"
+        const options = {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        };
+        
+        return date.toLocaleString('en-US', options);
+    }
+    
+    /**
+     * Format amount to currency string with 2 decimal places
+     */
+    static formatAmount(amount) {
+        const sign = amount >= 0 ? '+' : '';
+        return sign + amount.toFixed(2);
+    }
+    
+    /**
+     * Escape HTML to prevent XSS
+     */
+    static escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 }
 
@@ -1039,21 +1618,21 @@ function initApp() {
         chartRenderer = new ChartRenderer(chartCanvas);
     }
     
-    // Initialize UI components
-    renderTransactionList();
+    // Initialize UI Controller (centralizes all UI coordination)
+    UIController.init();
+    
+    // Initialize UI components using coordinated approach
+    UIController.renderTransactionList();
     populateCategoryDropdown();
     renderCategoryManagement();
     renderBudgetManagement();
-    updateTotalBalance();
-    updateChart();
+    UIController.updateTotalBalance();
+    UIController.updateChart();
     
     // Check for exceeded budgets on page load (Requirement 7.9)
-    checkAndNotifyBudgetExceeded();
+    UIController.checkAndNotifyBudgetExceeded();
     
-    // Set up event listeners
-    setupEventListeners();
-    
-    console.log('Expense & Budget Visualizer initialized');
+    console.log('Expense & Budget Visualizer initialized with UIController coordination');
     console.log('Storage available:', appState.isStorageAvailable);
     console.log('Current state:', appState);
 }
@@ -1135,26 +1714,6 @@ function renderCategoryManagement() {
 }
 
 /**
- * Check for exceeded budgets and display notifications
- * Shows alert for each category that has exceeded its budget limit (Requirements 7.7, 7.8, 7.9)
- */
-function checkAndNotifyBudgetExceeded() {
-    // Get spending by category
-    const spendingByCategory = TransactionManager.getSpendingByCategory(appState.transactions);
-    
-    // Get exceeded categories
-    const exceededCategories = BudgetManager.getExceededCategories(spendingByCategory, appState.budgetLimits);
-    
-    // Display notification for each exceeded category (Requirements 7.7, 7.8)
-    exceededCategories.forEach(category => {
-        const spending = spendingByCategory.get(category);
-        const limit = appState.budgetLimits[category];
-        const message = BudgetManager.formatBudgetAlert(category, spending, limit);
-        UIController.showNotification(message, 'warning');
-    });
-}
-
-/**
  * Render the budget management UI
  * Shows budget limit setting form and list of categories with their limits and spending
  */
@@ -1175,7 +1734,7 @@ function renderBudgetManagement() {
                 <label for="budgetCategory">Category</label>
                 <select id="budgetCategory" name="budgetCategory">
                     <option value="">-- Select Category --</option>
-                    ${appState.categories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('')}
+                    ${appState.categories.map(cat => `<option value="${UIController.escapeHtml(cat)}">${UIController.escapeHtml(cat)}</option>`).join('')}
                 </select>
             </div>
             <div class="form-group">
@@ -1205,16 +1764,16 @@ function renderBudgetManagement() {
             const exceededClass = isExceeded ? 'exceeded' : '';
             
             html += `
-                <div class="budget-item ${exceededClass}" data-category="${escapeHtml(category)}">
+                <div class="budget-item ${exceededClass}" data-category="${UIController.escapeHtml(category)}">
                     <div class="budget-info">
-                        <div class="budget-category">${escapeHtml(category)}</div>
+                        <div class="budget-category">${UIController.escapeHtml(category)}</div>
                         <div class="budget-amounts">
                             <span class="budget-spending">Spending: $${spending.toFixed(2)}</span>
                             ${hasLimit ? `<span class="budget-limit">Limit: $${limit.toFixed(2)}</span>` : '<span class="budget-limit">No limit set</span>'}
                         </div>
                     </div>
                     <div class="budget-controls">
-                        ${hasLimit ? `<button class="btn btn-danger budget-delete" data-category="${escapeHtml(category)}">Delete Limit</button>` : ''}
+                        ${hasLimit ? `<button class="btn btn-danger budget-delete" data-category="${UIController.escapeHtml(category)}">Delete Limit</button>` : ''}
                     </div>
                 </div>
             `;
@@ -1226,324 +1785,6 @@ function renderBudgetManagement() {
     html += '</div>';
     
     budgetList.innerHTML = html;
-}
-
-/**
- * Set up all event listeners
- */
-function setupEventListeners() {
-    // Transaction form submission
-    const transactionForm = document.getElementById('transactionForm');
-    if (transactionForm) {
-        transactionForm.addEventListener('submit', handleTransactionSubmit);
-    }
-    
-    // Transaction delete buttons (using event delegation)
-    const transactionsList = document.getElementById('transactionsList');
-    if (transactionsList) {
-        transactionsList.addEventListener('click', handleTransactionDelete);
-    }
-    
-    // Add category button
-    const addCategoryBtn = document.getElementById('addCategoryBtn');
-    if (addCategoryBtn) {
-        addCategoryBtn.addEventListener('click', handleAddCategory);
-    }
-    
-    // Category input - allow Enter key to add category
-    const newCategoryInput = document.getElementById('newCategoryName');
-    if (newCategoryInput) {
-        newCategoryInput.addEventListener('keypress', (event) => {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                handleAddCategory();
-            }
-        });
-    }
-    
-    // Budget list event delegation for delete buttons
-    const budgetList = document.getElementById('budgetList');
-    if (budgetList) {
-        budgetList.addEventListener('click', (event) => {
-            // Handle delete button clicks
-            handleBudgetDelete(event);
-            
-            // Handle set budget button clicks (re-attached when rendered)
-            if (event.target && event.target.id === 'setBudgetBtn') {
-                handleSetBudget();
-            }
-        });
-    }
-}
-
-/**
- * Handle transaction form submission
- * @param {Event} event - Form submit event
- */
-function handleTransactionSubmit(event) {
-    event.preventDefault();
-    
-    // Clear previous errors
-    UIController.clearFieldErrors();
-    
-    // Get form values
-    const itemName = document.getElementById('itemName').value;
-    const amount = document.getElementById('amount').value;
-    const category = document.getElementById('category').value;
-    
-    // Validate inputs
-    const validation = Validator.validateTransaction(itemName, amount, category);
-    if (!validation.isValid) {
-        UIController.showFieldError(validation.field, validation.errorMessage);
-        return;
-    }
-    
-    // Create and add transaction
-    const numAmount = parseFloat(amount);
-    const newTransaction = TransactionManager.addTransaction(itemName, numAmount, category);
-    appState.transactions.push(newTransaction);
-    
-    // Save to storage and handle errors gracefully
-    let saveSuccess = true;
-    if (appState.isStorageAvailable) {
-        saveSuccess = StorageManager.saveState(appState);
-        if (!saveSuccess) {
-            // Storage failed - show error but keep transaction in memory
-            UIController.showError('Failed to save transaction to storage. Transaction is available for this session only.');
-        }
-    }
-    
-    // Update UI within 100ms (synchronous calls are well under 100ms)
-    renderTransactionList();
-    updateTotalBalance();
-    updateChart();
-    
-    // Check for exceeded budgets and show notifications (Requirements 7.7, 7.8)
-    checkAndNotifyBudgetExceeded();
-    
-    // Clear form
-    event.target.reset();
-    
-    // Show success notification only if save succeeded or storage is not available
-    if (saveSuccess || !appState.isStorageAvailable) {
-        UIController.showNotification('Transaction added successfully');
-    }
-}
-
-/**
- * Handle transaction deletion (event delegation)
- * @param {Event} event - Click event
- */
-function handleTransactionDelete(event) {
-    // Check if delete button was clicked
-    if (!event.target.classList.contains('transaction-delete')) {
-        return;
-    }
-    
-    const transactionId = event.target.getAttribute('data-id');
-    if (!transactionId) {
-        return;
-    }
-    
-    // Show confirmation dialog (Requirement 3.2)
-    const confirmed = window.confirm('Delete this transaction?');
-    
-    // Cancel flow - retain transaction (Requirement 3.5)
-    if (!confirmed) {
-        return;
-    }
-    
-    // Confirm flow - delete transaction (Requirements 3.3, 3.4)
-    const success = TransactionManager.deleteTransaction(transactionId, appState.transactions);
-    
-    if (success) {
-        // Save to storage and handle errors gracefully (Requirement 3.8)
-        let saveSuccess = true;
-        if (appState.isStorageAvailable) {
-            saveSuccess = StorageManager.saveState(appState);
-            if (!saveSuccess) {
-                // Storage failed - show error but transaction is deleted from memory
-                UIController.showError('Failed to save deletion to storage. Change is available for this session only.');
-            }
-        }
-        
-        // Update UI within 100ms (Requirements 3.4, 3.6)
-        // Synchronous calls are well under 100ms
-        renderTransactionList();
-        updateTotalBalance();
-        updateChart();
-        
-        // Check for exceeded budgets and show notifications (Requirements 7.7, 7.8)
-        checkAndNotifyBudgetExceeded();
-        
-        // Show success notification only if save succeeded or storage is not available
-        if (saveSuccess || !appState.isStorageAvailable) {
-            UIController.showNotification('Transaction deleted successfully');
-        }
-    } else {
-        UIController.showError('Failed to delete transaction');
-    }
-}
-
-/**
- * Handle adding a new category
- * Validates input, adds category to appState, updates UI and storage
- */
-function handleAddCategory() {
-    const newCategoryInput = document.getElementById('newCategoryName');
-    const categoryError = document.getElementById('categoryManagementError');
-    
-    if (!newCategoryInput || !categoryError) {
-        return;
-    }
-    
-    // Clear previous error
-    categoryError.textContent = '';
-    
-    // Get input value
-    const categoryName = newCategoryInput.value;
-    
-    // Check if limit is reached (Requirement 5.9)
-    if (CategoryManager.isLimitReached(appState.categories)) {
-        categoryError.textContent = 'Category limit reached (50 maximum)';
-        return;
-    }
-    
-    // Validate category name (Requirements 5.3, 5.4, 5.8)
-    const validation = Validator.validateCategory(categoryName, appState.categories);
-    if (!validation.isValid) {
-        categoryError.textContent = validation.errorMessage;
-        return;
-    }
-    
-    // Add category (Requirement 5.2)
-    appState.categories = CategoryManager.addCategory(validation.sanitizedName, appState.categories);
-    
-    // Save to storage (Requirement 5.5)
-    let saveSuccess = true;
-    if (appState.isStorageAvailable) {
-        saveSuccess = StorageManager.saveState(appState);
-        if (!saveSuccess) {
-            UIController.showError('Failed to save category to storage. Category is available for this session only.');
-        }
-    }
-    
-    // Update UI (Requirement 5.6)
-    populateCategoryDropdown();
-    renderCategoryManagement();
-    renderBudgetManagement();
-    
-    // Clear input
-    newCategoryInput.value = '';
-    
-    // Show success notification
-    if (saveSuccess || !appState.isStorageAvailable) {
-        UIController.showNotification(`Category "${validation.sanitizedName}" added successfully`);
-    }
-}
-
-/**
- * Handle setting or updating a budget limit
- * Validates input, sets budget limit in appState, updates UI and storage
- */
-function handleSetBudget() {
-    const budgetCategorySelect = document.getElementById('budgetCategory');
-    const budgetAmountInput = document.getElementById('budgetAmount');
-    const budgetError = document.getElementById('budgetError');
-    
-    if (!budgetCategorySelect || !budgetAmountInput || !budgetError) {
-        return;
-    }
-    
-    // Clear previous error
-    budgetError.textContent = '';
-    
-    // Get values
-    const category = budgetCategorySelect.value;
-    const amount = budgetAmountInput.value;
-    
-    // Validate category selection
-    if (!category || category.trim() === '') {
-        budgetError.textContent = 'Please select a category';
-        return;
-    }
-    
-    // Validate budget limit amount (Requirements 7.2, 7.3)
-    const validation = Validator.validateBudgetLimit(amount);
-    if (!validation.isValid) {
-        budgetError.textContent = validation.errorMessage;
-        return;
-    }
-    
-    // Set budget limit (Requirements 7.1, 7.5)
-    const numAmount = parseFloat(amount);
-    appState.budgetLimits = BudgetManager.setBudgetLimit(category, numAmount, appState.budgetLimits);
-    
-    // Save to storage (Requirement 7.4)
-    let saveSuccess = true;
-    if (appState.isStorageAvailable) {
-        saveSuccess = StorageManager.saveState(appState);
-        if (!saveSuccess) {
-            UIController.showError('Failed to save budget limit to storage. Limit is available for this session only.');
-        }
-    }
-    
-    // Update UI
-    renderBudgetManagement();
-    updateChart();
-    
-    // Clear inputs
-    budgetCategorySelect.value = '';
-    budgetAmountInput.value = '';
-    
-    // Show success notification
-    if (saveSuccess || !appState.isStorageAvailable) {
-        UIController.showNotification(`Budget limit set for ${category}: $${numAmount.toFixed(2)}`);
-    }
-}
-
-/**
- * Handle deleting a budget limit (event delegation)
- * @param {Event} event - Click event
- */
-function handleBudgetDelete(event) {
-    // Check if delete button was clicked
-    if (!event.target.classList.contains('budget-delete')) {
-        return;
-    }
-    
-    const category = event.target.getAttribute('data-category');
-    if (!category) {
-        return;
-    }
-    
-    // Show confirmation dialog
-    const confirmed = window.confirm(`Delete budget limit for ${category}?`);
-    
-    if (!confirmed) {
-        return;
-    }
-    
-    // Delete budget limit (Requirement 7.6)
-    appState.budgetLimits = BudgetManager.deleteBudgetLimit(category, appState.budgetLimits);
-    
-    // Save to storage
-    let saveSuccess = true;
-    if (appState.isStorageAvailable) {
-        saveSuccess = StorageManager.saveState(appState);
-        if (!saveSuccess) {
-            UIController.showError('Failed to save deletion to storage. Change is available for this session only.');
-        }
-    }
-    
-    // Update UI
-    renderBudgetManagement();
-    updateChart();
-    
-    // Show success notification
-    if (saveSuccess || !appState.isStorageAvailable) {
-        UIController.showNotification(`Budget limit deleted for ${category}`);
-    }
 }
 
 // Initialize app when DOM is ready
