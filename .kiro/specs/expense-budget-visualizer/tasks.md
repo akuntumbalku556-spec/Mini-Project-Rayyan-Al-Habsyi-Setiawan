@@ -78,14 +78,14 @@ The implementation follows an incremental approach where each task builds on pre
 - [ ] 4. Checkpoint - Verify transaction features
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Implement transaction deletion
+- [x] 5. Implement transaction deletion
   - [ ] 5.1 Add delete button to each transaction in the list
     - Add delete button HTML element to each transaction item
     - Style delete button for accessibility and visibility
     - Wire click event to deletion handler
     - _Requirements: 3.1_
 
-  - [ ] 5.2 Implement deletion with confirmation dialog
+  - [x] 5.2 Implement deletion with confirmation dialog
     - Show confirmation dialog with message "Delete this transaction?"
     - Implement cancel flow that retains transaction
     - Implement confirm flow that removes transaction from storage and display
@@ -93,15 +93,15 @@ The implementation follows an incremental approach where each task builds on pre
     - Handle storage deletion errors with user-friendly messages
     - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 3.8_
 
-- [ ] 6. Implement category management
-  - [ ] 6.1 Implement Category Manager
+- [x] 6. Implement category management
+  - [x] 6.1 Implement Category Manager
     - Write `CategoryManager` class with `addCategory()`, `categoryExists()`, and `isLimitReached()` methods
     - Define default categories: ["Food", "Transport", "Fun"]
     - Set maximum category limit to 50
     - Implement case-insensitive duplicate checking
     - _Requirements: 5.1, 5.8, 5.9_
 
-  - [ ] 6.2 Build category management UI
+  - [x] 6.2 Build category management UI
     - Create category management section with input field for new category name
     - Add button to add new custom category
     - Display list of all categories (default + custom)
@@ -109,7 +109,7 @@ The implementation follows an incremental approach where each task builds on pre
     - Disable add button when limit reached with message
     - _Requirements: 5.2, 5.9_
 
-  - [ ] 6.3 Implement custom category creation with validation
+  - [x] 6.3 Implement custom category creation with validation
     - Validate category name using Validator module
     - Display validation errors for empty, whitespace-only, or too-long names
     - Display error for duplicate category names (case-insensitive)
@@ -118,7 +118,7 @@ The implementation follows an incremental approach where each task builds on pre
     - _Requirements: 5.3, 5.4, 5.5, 5.6, 5.8_
 
 
-  - [ ] 6.5 Load custom categories from storage on page load
+  - [x] 6.5 Load custom categories from storage on page load
     - Load categories from Local Storage using StorageManager
     - Merge with default categories
     - Populate category dropdown in transaction form
@@ -128,14 +128,14 @@ The implementation follows an incremental approach where each task builds on pre
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 8. Implement budget features
-  - [ ] 8.1 Implement Budget Manager
+  - [x] 8.1 Implement Budget Manager
     - Write `BudgetManager` class with `setBudgetLimit()`, `deleteBudgetLimit()`, and `isBudgetExceeded()` methods
     - Implement `getExceededCategories()` to find categories with spending > limit
     - Implement `formatBudgetAlert()` to create user-friendly messages
     - _Requirements: 7.7, 7.8_
 
 
-  - [ ] 8.3 Build budget limit setting UI
+  - [x] 8.3 Build budget limit setting UI
     - Create budget management section with dropdown to select category
     - Add input field for budget limit amount
     - Add button to set/update budget limit
@@ -143,7 +143,7 @@ The implementation follows an incremental approach where each task builds on pre
     - Add button to delete budget limit for each category
     - _Requirements: 7.1, 7.5, 7.6, 7.11_
 
-  - [ ] 8.4 Implement budget limit validation and storage
+  - [x] 8.4 Implement budget limit validation and storage
     - Validate budget limit using Validator module
     - Display errors for non-numeric or out-of-range values [0.01, 999999999.99]
     - Save budget limits to Local Storage
@@ -151,7 +151,7 @@ The implementation follows an incremental approach where each task builds on pre
     - _Requirements: 7.2, 7.3, 7.4, 7.10_
 
 
-  - [ ] 8.6 Implement budget exceeded alerts and visual indicators
+  - [x] 8.6 Implement budget exceeded alerts and visual indicators
     - Check for exceeded budgets after adding/deleting transactions
     - Display notification message "Budget exceeded for [Category]: [Amount] / [Limit]"
     - Apply visual indicator (red border/background) to exceeded categories in transaction list
@@ -162,7 +162,7 @@ The implementation follows an incremental approach where each task builds on pre
 
 
 - [ ] 10. Implement spending visualization
-  - [ ] 10.1 Choose and integrate Chart.js library
+  - [x] 10.1 Choose and integrate Chart.js library
     - Add Chart.js CDN link to index.html (or download for offline use)
     - Create canvas element for pie chart in HTML
     - Initialize Chart.js instance with basic configuration

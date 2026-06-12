@@ -213,6 +213,17 @@ body {
     border-left: 4px solid var(--accent-success);
 }
 
+.notification-banner.warning {
+    background-color: #feebc8;
+    color: #744210;
+    border-left: 4px solid var(--accent-warning);
+}
+
+[data-theme="dark"] .notification-banner.warning {
+    background-color: #744210;
+    color: #fbd38d;
+}
+
 .error-banner.visible,
 .notification-banner.visible {
     display: block;
@@ -441,9 +452,21 @@ input::placeholder {
 
 .category-list {
     display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.category-count {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    padding: var(--spacing-xs) 0;
+}
+
+.category-tags-container {
+    display: flex;
     flex-wrap: wrap;
     gap: var(--spacing-sm);
-    margin-top: var(--spacing-md);
 }
 
 .category-tag {
@@ -457,9 +480,34 @@ input::placeholder {
     font-size: var(--font-size-sm);
 }
 
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
+
 /* ============================================
    Budget Management
    ============================================ */
+
+.budget-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.budget-items-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
 
 .budget-list {
     display: flex;
@@ -494,6 +542,9 @@ input::placeholder {
 .budget-amounts {
     font-size: var(--font-size-sm);
     color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
 }
 
 .budget-controls {

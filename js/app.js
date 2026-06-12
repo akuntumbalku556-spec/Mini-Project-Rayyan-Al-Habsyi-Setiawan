@@ -305,6 +305,135 @@ class Validator {
 }
 
 // ============================================
+// Category Manager
+// Manages category lifecycle and validation
+// ============================================
+
+class CategoryManager {
+    static DEFAULT_CATEGORIES = ['Food', 'Transport', 'Fun'];
+    static MAX_CATEGORIES = 50;
+    
+    /**
+     * Add custom category
+     * @param {string} name - Category name to add
+     * @param {Array} existingCategories - Current list of categories
+     * @returns {Array} Updated categories array
+     */
+    static addCategory(name, existingCategories) {
+        const sanitized = Validator.sanitizeString(name);
+        const updatedCategories = [...existingCategories, sanitized];
+        return updatedCategories;
+    }
+    
+    /**
+     * Check if category exists (case-insensitive)
+     * @param {string} name - Category name to check
+     * @param {Array} categories - List of categories
+     * @returns {boolean} True if category exists
+     */
+    static categoryExists(name, categories) {
+        const lowerName = name.toLowerCase();
+        return categories.some(cat => cat.toLowerCase() === lowerName);
+    }
+    
+    /**
+     * Check if category limit reached
+     * @param {Array} categories - Current list of categories
+     * @returns {boolean} True if limit is reached
+     */
+    static isLimitReached(categories) {
+        return categories.length >= this.MAX_CATEGORIES;
+    }
+    
+    /**
+     * Get all categories (default + custom)
+     * @returns {Array} All categories
+     */
+    static getCategories() {
+        // This would be used in contexts where we need to retrieve from appState
+        // For now, it's a placeholder method
+        return appState.categories;
+    }
+}
+
+// ============================================
+// Budget Manager
+// Manages budget limits and alerts
+// ============================================
+
+class BudgetManager {
+    /**
+     * Set budget limit for category
+     * @param {string} category - Category name
+     * @param {number} limit - Budget limit amount
+     * @param {Object} budgetLimits - Current budget limits object
+     * @returns {Object} Updated budget limits
+     */
+    static setBudgetLimit(category, limit, budgetLimits) {
+        const updatedLimits = { ...budgetLimits };
+        updatedLimits[category] = limit;
+        return updatedLimits;
+    }
+    
+    /**
+     * Delete budget limit for category
+     * @param {string} category - Category name
+     * @param {Object} budgetLimits - Current budget limits object
+     * @returns {Object} Updated budget limits
+     */
+    static deleteBudgetLimit(category, budgetLimits) {
+        const updatedLimits = { ...budgetLimits };
+        delete updatedLimits[category];
+        return updatedLimits;
+    }
+    
+    /**
+     * Check if category exceeds budget
+     * @param {string} category - Category name
+     * @param {number} spending - Total spending for category
+     * @param {Object} limits - Budget limits object
+     * @returns {boolean} True if budget is exceeded
+     */
+    static isBudgetExceeded(category, spending, limits) {
+        if (!limits.hasOwnProperty(category)) {
+            return false;
+        }
+        
+        const limit = limits[category];
+        return spending > limit;
+    }
+    
+    /**
+     * Get all categories exceeding budget
+     * @param {Map} spendingByCategory - Map of category to spending
+     * @param {Object} limits - Budget limits object
+     * @returns {Array} Array of category names exceeding budget
+     */
+    static getExceededCategories(spendingByCategory, limits) {
+        const exceeded = [];
+        
+        for (const [category, spending] of spendingByCategory) {
+            if (this.isBudgetExceeded(category, spending, limits)) {
+                exceeded.push(category);
+            }
+        }
+        
+        return exceeded;
+    }
+    
+    /**
+     * Format budget alert message
+     * @param {string} category - Category name
+     * @param {number} spending - Total spending
+     * @param {number} limit - Budget limit
+     * @returns {string} Formatted alert message
+     */
+    static formatBudgetAlert(category, spending, limit) {
+        return `Budget exceeded for ${category}: $${spending.toFixed(2)} / $${limit.toFixed(2)}`;
+    }
+}
+
+// ============================================
 // Transaction Manager
 // Manages transaction CRUD operations and business logic
 // ============================================
@@ -475,17 +604,25 @@ class UIController {
     /**
      * Show notification message
      * @param {string} message - Notification message to display
+     * @param {string} type - Notification type ('success' or 'warning')
      */
-    static showNotification(message) {
+    static showNotification(message, type = 'success') {
         const notificationBanner = document.getElementById('notificationBanner');
         if (notificationBanner) {
             notificationBanner.textContent = message;
+            
+            // Remove existing type classes
+            notificationBanner.classList.remove('success', 'warning');
+            
+            // Add type-specific class
+            notificationBanner.classList.add(type);
             notificationBanner.classList.add('visible');
             
-            // Auto-hide after 3 seconds
+            // Auto-hide after 3 seconds (or 5 seconds for warnings)
+            const duration = type === 'warning' ? 5000 : 3000;
             setTimeout(() => {
                 notificationBanner.classList.remove('visible');
-            }, 3000);
+            }, duration);
         }
     }
     
@@ -568,6 +705,10 @@ function renderTransactionList() {
         return;
     }
     
+    // Get exceeded categories for visual indicators (Requirement 7.9)
+    const spendingByCategory = TransactionManager.getSpendingByCategory(appState.transactions);
+    const exceededCategories = BudgetManager.getExceededCategories(spendingByCategory, appState.budgetLimits);
+    
     // Build HTML for transaction items
     let html = '';
     sortedTransactions.forEach(transaction => {
@@ -575,8 +716,12 @@ function renderTransactionList() {
         const formattedAmount = formatAmount(transaction.amount);
         const formattedTimestamp = formatTimestamp(transaction.timestamp);
         
+        // Apply visual indicator if category is exceeded (Requirement 7.9)
+        const isExceeded = exceededCategories.includes(transaction.category);
+        const exceededClass = isExceeded ? 'budget-exceeded' : '';
+        
         html += `
-            <div class="transaction-item" data-id="${transaction.id}">
+            <div class="transaction-item ${exceededClass}" data-id="${transaction.id}">
                 <div class="transaction-details">
                     <div class="transaction-name">${escapeHtml(transaction.itemName)}</div>
                     <div class="transaction-meta">
@@ -675,7 +820,12 @@ function initApp() {
     // Initialize UI components
     renderTransactionList();
     populateCategoryDropdown();
+    renderCategoryManagement();
+    renderBudgetManagement();
     updateTotalBalance();
+    
+    // Check for exceeded budgets on page load (Requirement 7.9)
+    checkAndNotifyBudgetExceeded();
     
     // Set up event listeners
     setupEventListeners();
@@ -705,6 +855,157 @@ function populateCategoryDropdown() {
 }
 
 /**
+ * Render the category management UI
+ * Shows list of all categories with count and limit display
+ */
+function renderCategoryManagement() {
+    const categoryList = document.getElementById('categoryList');
+    if (!categoryList) return;
+    
+    // Get current count and check if limit is reached
+    const currentCount = appState.categories.length;
+    const maxCount = CategoryManager.MAX_CATEGORIES;
+    const isLimitReached = CategoryManager.isLimitReached(appState.categories);
+    
+    // Build category count display
+    const countDisplay = document.createElement('div');
+    countDisplay.className = 'category-count';
+    countDisplay.textContent = `${currentCount} / ${maxCount} categories`;
+    
+    // Build category tags
+    const tagsContainer = document.createElement('div');
+    tagsContainer.className = 'category-tags-container';
+    
+    appState.categories.forEach(category => {
+        const tag = document.createElement('span');
+        tag.className = 'category-tag';
+        tag.textContent = category;
+        tagsContainer.appendChild(tag);
+    });
+    
+    // Clear and update category list
+    categoryList.innerHTML = '';
+    categoryList.appendChild(countDisplay);
+    categoryList.appendChild(tagsContainer);
+    
+    // Update add button state
+    const addCategoryBtn = document.getElementById('addCategoryBtn');
+    if (addCategoryBtn) {
+        if (isLimitReached) {
+            addCategoryBtn.disabled = true;
+            
+            // Show limit message
+            const categoryError = document.getElementById('categoryManagementError');
+            if (categoryError) {
+                categoryError.textContent = 'Category limit reached (50 maximum)';
+            }
+        } else {
+            addCategoryBtn.disabled = false;
+            
+            // Clear any limit message
+            const categoryError = document.getElementById('categoryManagementError');
+            if (categoryError && categoryError.textContent.includes('limit reached')) {
+                categoryError.textContent = '';
+            }
+        }
+    }
+}
+
+/**
+ * Check for exceeded budgets and display notifications
+ * Shows alert for each category that has exceeded its budget limit (Requirements 7.7, 7.8, 7.9)
+ */
+function checkAndNotifyBudgetExceeded() {
+    // Get spending by category
+    const spendingByCategory = TransactionManager.getSpendingByCategory(appState.transactions);
+    
+    // Get exceeded categories
+    const exceededCategories = BudgetManager.getExceededCategories(spendingByCategory, appState.budgetLimits);
+    
+    // Display notification for each exceeded category (Requirements 7.7, 7.8)
+    exceededCategories.forEach(category => {
+        const spending = spendingByCategory.get(category);
+        const limit = appState.budgetLimits[category];
+        const message = BudgetManager.formatBudgetAlert(category, spending, limit);
+        UIController.showNotification(message, 'warning');
+    });
+}
+
+/**
+ * Render the budget management UI
+ * Shows budget limit setting form and list of categories with their limits and spending
+ */
+function renderBudgetManagement() {
+    const budgetList = document.getElementById('budgetList');
+    if (!budgetList) return;
+    
+    // Get spending by category
+    const spendingByCategory = TransactionManager.getSpendingByCategory(appState.transactions);
+    
+    // Get exceeded categories
+    const exceededCategories = BudgetManager.getExceededCategories(spendingByCategory, appState.budgetLimits);
+    
+    // Build budget setting form
+    let html = `
+        <div class="budget-form">
+            <div class="form-group">
+                <label for="budgetCategory">Category</label>
+                <select id="budgetCategory" name="budgetCategory">
+                    <option value="">-- Select Category --</option>
+                    ${appState.categories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="budgetAmount">Budget Limit</label>
+                <input 
+                    type="number" 
+                    id="budgetAmount" 
+                    name="budgetAmount"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="e.g., 500.00"
+                >
+            </div>
+            <button id="setBudgetBtn" class="btn btn-primary">Set Budget</button>
+            <span id="budgetError" class="error-message" role="alert"></span>
+        </div>
+        <div class="budget-items-list">
+    `;
+    
+    // Display each category with its limit and spending
+    if (appState.categories.length > 0) {
+        appState.categories.forEach(category => {
+            const spending = spendingByCategory.get(category) || 0;
+            const limit = appState.budgetLimits[category];
+            const hasLimit = limit !== undefined;
+            const isExceeded = exceededCategories.includes(category);
+            const exceededClass = isExceeded ? 'exceeded' : '';
+            
+            html += `
+                <div class="budget-item ${exceededClass}" data-category="${escapeHtml(category)}">
+                    <div class="budget-info">
+                        <div class="budget-category">${escapeHtml(category)}</div>
+                        <div class="budget-amounts">
+                            <span class="budget-spending">Spending: $${spending.toFixed(2)}</span>
+                            ${hasLimit ? `<span class="budget-limit">Limit: $${limit.toFixed(2)}</span>` : '<span class="budget-limit">No limit set</span>'}
+                        </div>
+                    </div>
+                    <div class="budget-controls">
+                        ${hasLimit ? `<button class="btn btn-danger budget-delete" data-category="${escapeHtml(category)}">Delete Limit</button>` : ''}
+                    </div>
+                </div>
+            `;
+        });
+    } else {
+        html += '<div class="empty-state">No categories available. Add categories first.</div>';
+    }
+    
+    html += '</div>';
+    
+    budgetList.innerHTML = html;
+}
+
+/**
  * Set up all event listeners
  */
 function setupEventListeners() {
@@ -718,6 +1019,37 @@ function setupEventListeners() {
     const transactionsList = document.getElementById('transactionsList');
     if (transactionsList) {
         transactionsList.addEventListener('click', handleTransactionDelete);
+    }
+    
+    // Add category button
+    const addCategoryBtn = document.getElementById('addCategoryBtn');
+    if (addCategoryBtn) {
+        addCategoryBtn.addEventListener('click', handleAddCategory);
+    }
+    
+    // Category input - allow Enter key to add category
+    const newCategoryInput = document.getElementById('newCategoryName');
+    if (newCategoryInput) {
+        newCategoryInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                handleAddCategory();
+            }
+        });
+    }
+    
+    // Budget list event delegation for delete buttons
+    const budgetList = document.getElementById('budgetList');
+    if (budgetList) {
+        budgetList.addEventListener('click', (event) => {
+            // Handle delete button clicks
+            handleBudgetDelete(event);
+            
+            // Handle set budget button clicks (re-attached when rendered)
+            if (event.target && event.target.id === 'setBudgetBtn') {
+                handleSetBudget();
+            }
+        });
     }
 }
 
@@ -762,6 +1094,9 @@ function handleTransactionSubmit(event) {
     renderTransactionList();
     updateTotalBalance();
     
+    // Check for exceeded budgets and show notifications (Requirements 7.7, 7.8)
+    checkAndNotifyBudgetExceeded();
+    
     // Clear form
     event.target.reset();
     
@@ -786,11 +1121,19 @@ function handleTransactionDelete(event) {
         return;
     }
     
-    // Delete transaction
+    // Show confirmation dialog (Requirement 3.2)
+    const confirmed = window.confirm('Delete this transaction?');
+    
+    // Cancel flow - retain transaction (Requirement 3.5)
+    if (!confirmed) {
+        return;
+    }
+    
+    // Confirm flow - delete transaction (Requirements 3.3, 3.4)
     const success = TransactionManager.deleteTransaction(transactionId, appState.transactions);
     
     if (success) {
-        // Save to storage and handle errors gracefully
+        // Save to storage and handle errors gracefully (Requirement 3.8)
         let saveSuccess = true;
         if (appState.isStorageAvailable) {
             saveSuccess = StorageManager.saveState(appState);
@@ -800,9 +1143,13 @@ function handleTransactionDelete(event) {
             }
         }
         
-        // Update UI within 100ms (synchronous calls are well under 100ms)
+        // Update UI within 100ms (Requirements 3.4, 3.6)
+        // Synchronous calls are well under 100ms
         renderTransactionList();
         updateTotalBalance();
+        
+        // Check for exceeded budgets and show notifications (Requirements 7.7, 7.8)
+        checkAndNotifyBudgetExceeded();
         
         // Show success notification only if save succeeded or storage is not available
         if (saveSuccess || !appState.isStorageAvailable) {
@@ -810,6 +1157,165 @@ function handleTransactionDelete(event) {
         }
     } else {
         UIController.showError('Failed to delete transaction');
+    }
+}
+
+/**
+ * Handle adding a new category
+ * Validates input, adds category to appState, updates UI and storage
+ */
+function handleAddCategory() {
+    const newCategoryInput = document.getElementById('newCategoryName');
+    const categoryError = document.getElementById('categoryManagementError');
+    
+    if (!newCategoryInput || !categoryError) {
+        return;
+    }
+    
+    // Clear previous error
+    categoryError.textContent = '';
+    
+    // Get input value
+    const categoryName = newCategoryInput.value;
+    
+    // Check if limit is reached (Requirement 5.9)
+    if (CategoryManager.isLimitReached(appState.categories)) {
+        categoryError.textContent = 'Category limit reached (50 maximum)';
+        return;
+    }
+    
+    // Validate category name (Requirements 5.3, 5.4, 5.8)
+    const validation = Validator.validateCategory(categoryName, appState.categories);
+    if (!validation.isValid) {
+        categoryError.textContent = validation.errorMessage;
+        return;
+    }
+    
+    // Add category (Requirement 5.2)
+    appState.categories = CategoryManager.addCategory(validation.sanitizedName, appState.categories);
+    
+    // Save to storage (Requirement 5.5)
+    let saveSuccess = true;
+    if (appState.isStorageAvailable) {
+        saveSuccess = StorageManager.saveState(appState);
+        if (!saveSuccess) {
+            UIController.showError('Failed to save category to storage. Category is available for this session only.');
+        }
+    }
+    
+    // Update UI (Requirement 5.6)
+    populateCategoryDropdown();
+    renderCategoryManagement();
+    renderBudgetManagement();
+    
+    // Clear input
+    newCategoryInput.value = '';
+    
+    // Show success notification
+    if (saveSuccess || !appState.isStorageAvailable) {
+        UIController.showNotification(`Category "${validation.sanitizedName}" added successfully`);
+    }
+}
+
+/**
+ * Handle setting or updating a budget limit
+ * Validates input, sets budget limit in appState, updates UI and storage
+ */
+function handleSetBudget() {
+    const budgetCategorySelect = document.getElementById('budgetCategory');
+    const budgetAmountInput = document.getElementById('budgetAmount');
+    const budgetError = document.getElementById('budgetError');
+    
+    if (!budgetCategorySelect || !budgetAmountInput || !budgetError) {
+        return;
+    }
+    
+    // Clear previous error
+    budgetError.textContent = '';
+    
+    // Get values
+    const category = budgetCategorySelect.value;
+    const amount = budgetAmountInput.value;
+    
+    // Validate category selection
+    if (!category || category.trim() === '') {
+        budgetError.textContent = 'Please select a category';
+        return;
+    }
+    
+    // Validate budget limit amount (Requirements 7.2, 7.3)
+    const validation = Validator.validateBudgetLimit(amount);
+    if (!validation.isValid) {
+        budgetError.textContent = validation.errorMessage;
+        return;
+    }
+    
+    // Set budget limit (Requirements 7.1, 7.5)
+    const numAmount = parseFloat(amount);
+    appState.budgetLimits = BudgetManager.setBudgetLimit(category, numAmount, appState.budgetLimits);
+    
+    // Save to storage (Requirement 7.4)
+    let saveSuccess = true;
+    if (appState.isStorageAvailable) {
+        saveSuccess = StorageManager.saveState(appState);
+        if (!saveSuccess) {
+            UIController.showError('Failed to save budget limit to storage. Limit is available for this session only.');
+        }
+    }
+    
+    // Update UI
+    renderBudgetManagement();
+    
+    // Clear inputs
+    budgetCategorySelect.value = '';
+    budgetAmountInput.value = '';
+    
+    // Show success notification
+    if (saveSuccess || !appState.isStorageAvailable) {
+        UIController.showNotification(`Budget limit set for ${category}: $${numAmount.toFixed(2)}`);
+    }
+}
+
+/**
+ * Handle deleting a budget limit (event delegation)
+ * @param {Event} event - Click event
+ */
+function handleBudgetDelete(event) {
+    // Check if delete button was clicked
+    if (!event.target.classList.contains('budget-delete')) {
+        return;
+    }
+    
+    const category = event.target.getAttribute('data-category');
+    if (!category) {
+        return;
+    }
+    
+    // Show confirmation dialog
+    const confirmed = window.confirm(`Delete budget limit for ${category}?`);
+    
+    if (!confirmed) {
+        return;
+    }
+    
+    // Delete budget limit (Requirement 7.6)
+    appState.budgetLimits = BudgetManager.deleteBudgetLimit(category, appState.budgetLimits);
+    
+    // Save to storage
+    let saveSuccess = true;
+    if (appState.isStorageAvailable) {
+        saveSuccess = StorageManager.saveState(appState);
+        if (!saveSuccess) {
+            UIController.showError('Failed to save deletion to storage. Change is available for this session only.');
+        }
+    }
+    
+    // Update UI
+    renderBudgetManagement();
+    
+    // Show success notification
+    if (saveSuccess || !appState.isStorageAvailable) {
+        UIController.showNotification(`Budget limit deleted for ${category}`);
     }
 }
 
