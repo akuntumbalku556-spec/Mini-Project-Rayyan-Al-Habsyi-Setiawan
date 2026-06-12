@@ -2072,53 +2072,92 @@ let chartRenderer = null;
 
 /**
  * Initialize application
+ * Sequence (Requirements 2.4, 5.7, 7.10, 8.6, 9.5):
+ *   1. Check storage availability — show warning if unavailable
+ *   2. Load all persisted data from LocalStorage (transactions, categories, budgetLimits, themeMode)
+ *   3. Apply theme immediately (within 100ms — Req 8.6)
+ *   4. Initialize chart renderer
+ *   5. Cache DOM elements and set up all event listeners
+ *   6. Render initial UI state
  */
 function initApp() {
-    // Check Local Storage availability
+    // ── Step 1: Storage check ────────────────────────────────────────────────
     appState.isStorageAvailable = StorageManager.isAvailable();
-    
+
     if (!appState.isStorageAvailable) {
-        // Use ErrorHandler for consistent storage unavailability message (Requirement 9.7)
+        // Use ErrorHandler for consistent storage unavailability message (Req 9.7)
         ErrorHandler.displayError('Local storage is unavailable. Data will not be saved.', 'warning');
     }
-    
-    // Load saved state
+
+    // ── Step 2: Load all data from LocalStorage (Reqs 2.4, 5.7, 7.10, 9.5) ─
     if (appState.isStorageAvailable) {
-        const savedState = StorageManager.loadState();
-        if (savedState) {
-            appState = {
-                ...savedState,
-                isStorageAvailable: true
-            };
-        } else {
-            // No saved state or error loading - use defaults
-            // Error message already shown by StorageManager if there was an error
+        try {
+            const savedState = StorageManager.loadState();
+            if (savedState) {
+                // Restore transactions, categories, budgetLimits, and themeMode
+                appState = {
+                    ...savedState,
+                    isStorageAvailable: true
+                };
+            }
+            // If savedState is null the defaults in appState remain intact;
+            // any storage error is already reported inside StorageManager.loadState()
+        } catch (error) {
+            // Unexpected error during load — report and continue with defaults
+            ErrorHandler.handleError(error, 'initApp — load state');
         }
     }
-    
-    // Initialize chart renderer
+
+    // ── Step 3: Apply theme immediately (Req 8.6 — must happen within 100ms) ─
+    // This runs synchronously before any heavy rendering work so the correct
+    // theme is visible as early as possible.
+    const themeToApply = ThemeManager.loadTheme(appState.themeMode);
+    appState.themeMode = themeToApply;
+    ThemeManager.applyTheme(themeToApply);
+
+    // ── Step 4: Initialize chart renderer ───────────────────────────────────
     const chartCanvas = document.getElementById('spendingChart');
     if (chartCanvas) {
         chartRenderer = new ChartRenderer(chartCanvas);
     }
-    
-    // Initialize UI Controller (centralizes all UI coordination)
-    UIController.init();
-    
-    // Initialize UI components using coordinated approach
+
+    // ── Step 5: Cache DOM elements + set up all event listeners ─────────────
+    // UIController.init() calls cacheElements(), setupEventListeners(), and
+    // initializeTheme() internally.  We pass the already-applied theme so the
+    // icon and aria-label are set correctly without re-applying the theme.
+    UIController.cacheElements();
+    UIController.setupEventListeners();
+    // Sync the toggle icon/aria-label with the theme that was already applied
+    UIController.updateThemeIcon(appState.themeMode);
+
+    // ── Step 6: Render initial state ────────────────────────────────────────
+    // 6a. Transaction list (Req 2.4)
     UIController.renderTransactionList();
-    populateCategoryDropdown();
-    renderCategoryManagement();
-    renderBudgetManagement();
+
+    // 6b. Total balance display
     UIController.updateTotalBalance();
-    UIController.updateChart();
-    
-    // Check for exceeded budgets on page load (Requirement 7.9)
+
+    // 6c. Category dropdown (Req 5.7)
+    populateCategoryDropdown();
+
+    // 6d. Category management panel
+    renderCategoryManagement();
+
+    // 6e. Budget management panel (Req 7.10)
+    renderBudgetManagement();
+
+    // 6f. Budget-exceeded indicators (Req 7.9)
     UIController.checkAndNotifyBudgetExceeded();
-    
-    console.log('Expense & Budget Visualizer initialized with UIController coordination');
+
+    // 6g. Initial chart render
+    UIController.updateChart();
+
+    console.log('Expense & Budget Visualizer initialized');
     console.log('Storage available:', appState.isStorageAvailable);
-    console.log('Current state:', appState);
+    console.log('Loaded state — transactions:', appState.transactions.length,
+        '| categories:', appState.categories.length,
+        '| budgetLimits:', Object.keys(appState.budgetLimits).length,
+        '| theme:', appState.themeMode);
 }
 
 /**
