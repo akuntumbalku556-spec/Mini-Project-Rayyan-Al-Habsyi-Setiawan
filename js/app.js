@@ -585,9 +585,6 @@ class ThemeManager {
      * @param {string} theme - Theme mode ('light' or 'dark')
      */
     static applyTheme(theme) {
-        // Start performance measurement
-        const startTime = performance.now();
-        
         const html = document.documentElement;
         
         // Set data-theme attribute for CSS custom properties (Requirements 8.2, 8.3)
@@ -597,12 +594,6 @@ class ThemeManager {
         // Force style recalculation to ensure immediate visual change
         // This ensures the theme change is visible within 100ms
         html.offsetHeight; // Trigger reflow
-        
-        // Log performance in development
-        const applyTime = performance.now() - startTime;
-        if (applyTime > 50) { // Log if approaching 100ms limit
-            console.warn(`Theme application took ${applyTime.toFixed(2)}ms`);
-        }
     }
     
     /**
@@ -924,9 +915,12 @@ class ChartRenderer {
     
     /**
      * Show empty message when no spending data
+     * Uses UIController cached element if available (Requirement 10.4)
      */
     showEmptyMessage() {
-        const emptyMessage = document.getElementById('chartEmpty');
+        const emptyMessage = (typeof UIController !== 'undefined' && UIController.elements.chartEmpty)
+            ? UIController.elements.chartEmpty
+            : document.getElementById('chartEmpty');
         if (emptyMessage) {
             emptyMessage.classList.add('visible');
         }
@@ -939,9 +933,12 @@ class ChartRenderer {
     
     /**
      * Hide empty message when there's spending data
+     * Uses UIController cached element if available (Requirement 10.4)
      */
     hideEmptyMessage() {
-        const emptyMessage = document.getElementById('chartEmpty');
+        const emptyMessage = (typeof UIController !== 'undefined' && UIController.elements.chartEmpty)
+            ? UIController.elements.chartEmpty
+            : document.getElementById('chartEmpty');
         if (emptyMessage) {
             emptyMessage.classList.remove('visible');
         }
@@ -979,13 +976,12 @@ class UIController {
         
         // Initialize theme
         this.initializeTheme();
-        
-        console.log('UIController initialized with cached elements and event listeners');
     }
     
     /**
      * Cache frequently accessed DOM elements for performance
      * Reduces DOM queries and improves update speed
+     * Requirements: 10.2, 10.3, 10.4
      */
     static cacheElements() {
         const elementsToCache = [
@@ -998,7 +994,16 @@ class UIController {
             'budgetList',
             'themeToggle',
             'spendingChart',
-            'chartEmpty'
+            'chartEmpty',
+            // Category management elements
+            'addCategoryBtn',
+            'categoryManagementError',
+            // Transaction form category dropdown
+            'category',
+            // Field-level error spans
+            'itemNameError',
+            'amountError',
+            'categoryError'
         ];
         
         // Cache elements
@@ -1010,13 +1015,18 @@ class UIController {
         });
         
         // Cache form input elements
-        const formInputs = ['itemName', 'amount', 'category', 'newCategoryName', 'budgetCategory', 'budgetAmount'];
+        const formInputs = ['itemName', 'amount', 'newCategoryName', 'budgetCategory', 'budgetAmount'];
         formInputs.forEach(id => {
             const element = document.getElementById(id);
             if (element) {
                 this.elements[id] = element;
             }
         });
+        
+        // Cache theme icon span (child of themeToggle)
+        if (this.elements.themeToggle) {
+            this.elements.themeIcon = this.elements.themeToggle.querySelector('.theme-icon');
+        }
         
         // Cache error message elements
         const errorElements = document.querySelectorAll('.error-message');
@@ -1070,8 +1080,8 @@ class UIController {
             });
         }
         
-        // Add category button
-        const addCategoryBtn = document.getElementById('addCategoryBtn');
+        // Add category button — use cached ref for performance (Requirement 10.2)
+        const addCategoryBtn = this.elements.addCategoryBtn || document.getElementById('addCategoryBtn');
         if (addCategoryBtn) {
             addCategoryBtn.addEventListener('click', this.handleAddCategory.bind(this));
         }
@@ -1301,12 +1311,14 @@ class UIController {
     
     /**
      * Show field-specific error
+     * Uses cached element references where available (Requirement 10.2)
      * @param {string} field - Field name
      * @param {string} message - Error message
      */
     static showFieldError(field, message) {
-        const errorElement = document.getElementById(`${field}Error`);
-        const inputElement = document.getElementById(field);
+        // Use cached element if available, fall back to DOM query
+        const errorElement = this.elements[`${field}Error`] || document.getElementById(`${field}Error`);
+        const inputElement = this.elements[field] || document.getElementById(field);
         
         if (errorElement) {
             errorElement.textContent = message;
@@ -1361,9 +1373,6 @@ class UIController {
             return;
         }
         
-        // Performance monitoring - start timer
-        const startTime = performance.now();
-        
         // Get spending by category (positive amounts only)
         const spendingByCategory = TransactionManager.getSpendingByCategory(appState.transactions);
         
@@ -1372,15 +1381,6 @@ class UIController {
         
         // Update chart with new data
         chartRenderer.updateChart(spendingByCategory, exceededCategories);
-        
-        // Performance monitoring - end timer
-        const endTime = performance.now();
-        const duration = endTime - startTime;
-        
-        // Log performance metric and warn if exceeds budget (Requirement 10.5)
-        if (duration > 200) {
-            console.warn(`Chart update took ${duration.toFixed(2)}ms, exceeding 200ms budget`);
-        }
     }
     
     /**
@@ -1470,19 +1470,20 @@ class UIController {
     
     /**
      * Setup form validation with accessibility features
+     * Uses cached element references for performance (Requirement 10.2)
      */
     static setupFormValidation() {
-        // Transaction form inputs
+        // Transaction form inputs — use cached refs where available
         const transactionInputs = ['itemName', 'amount', 'category'];
         transactionInputs.forEach(inputId => {
-            const input = document.getElementById(inputId);
+            const input = this.elements[inputId] || document.getElementById(inputId);
             if (input) {
                 input.addEventListener('input', () => this.updateAriaInvalid(input));
                 input.addEventListener('blur', () => this.updateAriaInvalid(input));
             }
         });
         
-        // Category input
+        // Category input — already in cache
         if (this.elements.newCategoryName) {
             this.elements.newCategoryName.addEventListener('input', () => this.updateAriaInvalid(this.elements.newCategoryName));
             this.elements.newCategoryName.addEventListener('blur', () => this.updateAriaInvalid(this.elements.newCategoryName));
@@ -1497,7 +1498,10 @@ class UIController {
         if (!input) return;
         
         const value = input.value;
-        const errorElement = document.getElementById(`${input.id}Error`);
+        // Use cached error element if available, fall back to DOM query
+        const errorElement = (input.id && this.elements[`${input.id}Error`])
+            ? this.elements[`${input.id}Error`]
+            : document.getElementById(`${input.id}Error`);
         
         // Simple client-side validation for immediate feedback
         let isValid = true;
@@ -1527,18 +1531,12 @@ class UIController {
     static handleThemeToggle(event) {
         event.preventDefault();
         
-        // Record start time for performance measurement (Requirement 8.2: within 100ms)
-        const startTime = performance.now();
-        
         // Toggle theme (Requirements 8.1, 8.2)
         const newTheme = ThemeManager.toggleTheme(appState.themeMode);
         appState.themeMode = newTheme;
         
         // Update theme icon immediately
         this.updateThemeIcon(newTheme);
-        
-        // Measure theme application time
-        const themeApplyTime = performance.now() - startTime;
         
         // Save to storage (Requirement 8.4)
         if (appState.isStorageAvailable) {
@@ -1547,11 +1545,6 @@ class UIController {
                 // Theme still applies for this session even if save failed (Requirement 8.5)
                 this.showError('Failed to save theme preference. Theme will reset on page reload.');
             }
-        }
-        
-        // Log performance for verification
-        if (themeApplyTime > 100) {
-            console.warn(`Theme toggle took ${themeApplyTime.toFixed(2)}ms - exceeds 100ms requirement`);
         }
     }
     
@@ -1613,7 +1606,6 @@ class UIController {
             
         } catch (error) {
             this.showError('Failed to add transaction. Please try again.');
-            console.error('Transaction submission error:', error);
         } finally {
             // Always remove loading state
             this.setLoading(submitButton, false);
@@ -1680,7 +1672,6 @@ class UIController {
             }
         } catch (error) {
             this.showError('Failed to delete transaction. Please try again.');
-            console.error('Transaction deletion error:', error);
         } finally {
             // Always remove loading states
             this.setLoading(deleteButton, false);
@@ -1694,8 +1685,9 @@ class UIController {
      * Handle adding a new category
      */
     static async handleAddCategory() {
-        const categoryError = document.getElementById('categoryManagementError');
-        const addCategoryBtn = document.getElementById('addCategoryBtn');
+        // Use cached elements where available, fall back to DOM query
+        const categoryError = this.elements.categoryManagementError || document.getElementById('categoryManagementError');
+        const addCategoryBtn = this.elements.addCategoryBtn || document.getElementById('addCategoryBtn');
         
         if (!this.elements.newCategoryName || !categoryError) {
             return;
@@ -1753,7 +1745,6 @@ class UIController {
             }
         } catch (error) {
             this.showError('Failed to add category. Please try again.');
-            console.error('Category addition error:', error);
         } finally {
             // Always remove loading state
             this.setLoading(addCategoryBtn, false);
@@ -1777,8 +1768,11 @@ class UIController {
     
     /**
      * Handle setting or updating a budget limit
+     * Uses cached element references for performance (Requirement 10.2)
      */
     static handleSetBudget() {
+        // budgetError is re-created each time renderBudgetManagement() runs,
+        // so we must look it up dynamically here.
         const budgetError = document.getElementById('budgetError');
         
         if (!this.elements.budgetCategory || !this.elements.budgetAmount || !budgetError) {
@@ -1820,7 +1814,7 @@ class UIController {
         
         // Update UI
         renderBudgetManagement();
-        this.updateChart();
+        this.updateChartDebounced();
         
         // Clear inputs
         this.elements.budgetCategory.value = '';
@@ -1862,7 +1856,7 @@ class UIController {
         
         // Update UI
         renderBudgetManagement();
-        this.updateChart();
+        this.updateChartDebounced();
         
         // Show success notification
         if (saveSuccess || !appState.isStorageAvailable) {
@@ -1887,10 +1881,11 @@ class UIController {
     
     /**
      * Update theme toggle button icon and accessibility label
+     * Uses cached element references for performance (Requirement 10.2)
      */
     static updateThemeIcon(theme) {
-        const themeIcon = document.querySelector('#themeToggle .theme-icon');
-        const themeButton = document.getElementById('themeToggle');
+        const themeIcon = this.elements.themeIcon || document.querySelector('#themeToggle .theme-icon');
+        const themeButton = this.elements.themeToggle || document.getElementById('themeToggle');
         
         if (themeIcon) {
             // Use sun icon for light theme, moon icon for dark theme
@@ -2039,9 +2034,6 @@ class UIController {
                 this.setLoading(element, false);
             }
             
-            const duration = performance.now() - startTime;
-            console.log(`Operation completed in ${duration.toFixed(2)}ms`);
-            
             return result;
         } catch (error) {
             // Clear timeout and hide loading on error
@@ -2151,20 +2143,14 @@ function initApp() {
 
     // 6g. Initial chart render
     UIController.updateChart();
-
-    console.log('Expense & Budget Visualizer initialized');
-    console.log('Storage available:', appState.isStorageAvailable);
-    console.log('Loaded state — transactions:', appState.transactions.length,
-        '| categories:', appState.categories.length,
-        '| budgetLimits:', Object.keys(appState.budgetLimits).length,
-        '| theme:', appState.themeMode);
 }
 
 /**
  * Populate category dropdown with current categories
+ * Uses cached element reference if available (Requirement 10.2)
  */
 function populateCategoryDropdown() {
-    const categorySelect = document.getElementById('category');
+    const categorySelect = UIController.elements.category || document.getElementById('category');
     if (!categorySelect) return;
     
     // Clear existing options except the first one
@@ -2188,9 +2174,10 @@ function populateCategoryDropdown() {
 /**
  * Render the category management UI
  * Shows list of all categories with count and limit display
+ * Uses cached element references for performance (Requirement 10.2)
  */
 function renderCategoryManagement() {
-    const categoryList = document.getElementById('categoryList');
+    const categoryList = UIController.elements.categoryList || document.getElementById('categoryList');
     if (!categoryList) return;
     
     // Get current count and check if limit is reached
@@ -2225,14 +2212,14 @@ function renderCategoryManagement() {
     categoryList.appendChild(tagsContainer);
     
     // Update add button state
-    const addCategoryBtn = document.getElementById('addCategoryBtn');
+    const addCategoryBtn = UIController.elements.addCategoryBtn || document.getElementById('addCategoryBtn');
     if (addCategoryBtn) {
         if (isLimitReached) {
             addCategoryBtn.disabled = true;
             addCategoryBtn.setAttribute('aria-disabled', 'true');
             
             // Show limit message
-            const categoryError = document.getElementById('categoryManagementError');
+            const categoryError = UIController.elements.categoryManagementError || document.getElementById('categoryManagementError');
             if (categoryError) {
                 categoryError.textContent = 'Category limit reached (50 maximum)';
             }
@@ -2241,7 +2228,7 @@ function renderCategoryManagement() {
             addCategoryBtn.setAttribute('aria-disabled', 'false');
             
             // Clear any limit message
-            const categoryError = document.getElementById('categoryManagementError');
+            const categoryError = UIController.elements.categoryManagementError || document.getElementById('categoryManagementError');
             if (categoryError && categoryError.textContent.includes('limit reached')) {
                 categoryError.textContent = '';
             }
@@ -2252,9 +2239,10 @@ function renderCategoryManagement() {
 /**
  * Render the budget management UI
  * Shows budget limit setting form and list of categories with their limits and spending
+ * Uses cached element references for performance (Requirement 10.2)
  */
 function renderBudgetManagement() {
-    const budgetList = document.getElementById('budgetList');
+    const budgetList = UIController.elements.budgetList || document.getElementById('budgetList');
     if (!budgetList) return;
     
     // Get spending by category
