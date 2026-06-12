@@ -161,7 +161,7 @@ The implementation follows an incremental approach where each task builds on pre
 
 
 
-- [ ] 10. Implement spending visualization
+- [x] 10. Implement spending visualization
   - [x] 10.1 Choose and integrate Chart.js library
     - Add Chart.js CDN link to index.html (or download for offline use)
     - Create canvas element for pie chart in HTML
@@ -187,7 +187,7 @@ The implementation follows an incremental approach where each task builds on pre
     - Handle empty transaction list gracefully
     - _Requirements: 6.5_
 
-  - [ ] 10.6 Highlight budget-exceeded categories in chart
+  - [x] 10.6 Highlight budget-exceeded categories in chart
     - Get list of exceeded categories from BudgetManager
     - Apply distinct visual styling (e.g., red slice color) to exceeded categories
     - Update highlighting when budget limits change
@@ -229,7 +229,7 @@ The implementation follows an incremental approach where each task builds on pre
     - _Requirements: 8.2_
 
 - [ ] 13. Implement UI Controller and polish
-  - [ ] 13.1 Implement UI Controller coordination layer
+  - [x] 13.1 Implement UI Controller coordination layer
     - Write `UIController` class to coordinate all UI updates
     - Implement `init()` to set up all event listeners
     - Implement `renderTransactionList()`, `updateTotalBalance()`, `showError()`, `showNotification()`, `clearForm()` methods
@@ -237,7 +237,7 @@ The implementation follows an incremental approach where each task builds on pre
     - Cache DOM element references for performance
     - _Requirements: 2.3, 3.4, 10.2, 10.3_
 
-  - [ ] 13.2 Implement visual feedback for all user interactions
+  - [-] 13.2 Implement visual feedback for all user interactions
     - Add hover states for all buttons
     - Add active/pressed states for buttons
     - Show loading indicators for operations >100ms
@@ -245,14 +245,14 @@ The implementation follows an incremental approach where each task builds on pre
     - Display error notifications for failed operations
     - _Requirements: 13.4_
 
-  - [ ] 13.3 Implement responsive layout and spacing
+  - [x] 13.3 Implement responsive layout and spacing
     - Use flexbox/grid for layout structure
     - Ensure application is usable on mobile, tablet, and desktop screen sizes
     - Apply consistent spacing using CSS custom properties
     - Prevent visual clutter with appropriate whitespace
     - _Requirements: 13.2, 13.5, 13.6_
 
-  - [ ] 13.4 Add accessibility features
+  - [x] 13.4 Add accessibility features
     - Use semantic HTML elements (header, main, section, form, button)
     - Add ARIA labels to interactive elements
     - Add keyboard navigation support (Tab, Enter, Escape)
@@ -262,7 +262,7 @@ The implementation follows an incremental approach where each task builds on pre
 
 
 - [ ] 14. Performance optimization
-  - [ ] 14.1 Optimize DOM updates for performance
+  - [-] 14.1 Optimize DOM updates for performance
     - Use DocumentFragment for batch insertions in transaction list
     - Update only changed elements instead of re-rendering entire list
     - Cache DOM element references in UI Controller

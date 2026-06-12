@@ -902,6 +902,13 @@ class UIController {
         // Theme toggle button
         if (this.elements.themeToggle) {
             this.elements.themeToggle.addEventListener('click', this.handleThemeToggle.bind(this));
+            // Add keyboard support for theme toggle
+            this.elements.themeToggle.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    this.handleThemeToggle(event);
+                }
+            });
         }
         
         // Transaction form submission
@@ -912,6 +919,26 @@ class UIController {
         // Transaction delete buttons (using event delegation)
         if (this.elements.transactionsList) {
             this.elements.transactionsList.addEventListener('click', this.handleTransactionDelete.bind(this));
+            // Add keyboard navigation for transaction list
+            this.elements.transactionsList.addEventListener('keydown', this.handleTransactionListKeyboard.bind(this));
+        }
+        
+        // Add category form (convert div to form for proper submit handling)
+        const categoryForm = document.querySelector('.category-form');
+        if (categoryForm && this.elements.newCategoryName) {
+            // Handle form submission
+            categoryForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                this.handleAddCategory();
+            });
+            
+            // Add keyboard support for category input
+            this.elements.newCategoryName.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    this.handleAddCategory();
+                }
+            });
         }
         
         // Add category button
@@ -920,20 +947,17 @@ class UIController {
             addCategoryBtn.addEventListener('click', this.handleAddCategory.bind(this));
         }
         
-        // Category input - allow Enter key to add category
-        if (this.elements.newCategoryName) {
-            this.elements.newCategoryName.addEventListener('keypress', (event) => {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    this.handleAddCategory();
-                }
-            });
-        }
-        
         // Budget list event delegation for buttons
         if (this.elements.budgetList) {
             this.elements.budgetList.addEventListener('click', this.handleBudgetActions.bind(this));
+            this.elements.budgetList.addEventListener('keydown', this.handleBudgetKeyboard.bind(this));
         }
+        
+        // Global keyboard navigation
+        document.addEventListener('keydown', this.handleGlobalKeyboard.bind(this));
+        
+        // Form validation - update aria-invalid on input changes
+        this.setupFormValidation();
     }
     
     /**
@@ -984,27 +1008,61 @@ class UIController {
         const div = document.createElement('div');
         div.className = 'transaction-item';
         div.dataset.id = transaction.id;
+        div.setAttribute('role', 'listitem');
+        div.setAttribute('tabindex', '0');
         
         // Apply visual indicator if category is exceeded (Requirement 7.9)
         if (exceededCategories.includes(transaction.category)) {
             div.classList.add('budget-exceeded');
+            div.setAttribute('aria-describedby', 'budget-exceeded-info');
         }
         
+        // Create transaction details container
+        const detailsDiv = document.createElement('div');
+        detailsDiv.className = 'transaction-details';
+        
+        // Create transaction name element - use textContent for security
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'transaction-name';
+        nameDiv.textContent = transaction.itemName; // Use textContent instead of innerHTML
+        
+        // Create meta information container
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'transaction-meta';
+        
+        // Create category span - use textContent for security
+        const categorySpan = document.createElement('span');
+        categorySpan.className = 'transaction-category';
+        categorySpan.textContent = transaction.category; // Use textContent instead of innerHTML
+        
+        // Create timestamp span
+        const timestampSpan = document.createElement('span');
+        timestampSpan.className = 'transaction-timestamp';
+        timestampSpan.textContent = this.formatTimestamp(transaction.timestamp);
+        
+        // Create amount element
         const amountClass = transaction.amount >= 0 ? 'positive' : 'negative';
         const formattedAmount = this.formatAmount(transaction.amount);
-        const formattedTimestamp = this.formatTimestamp(transaction.timestamp);
+        const amountDiv = document.createElement('div');
+        amountDiv.className = `transaction-amount ${amountClass}`;
+        amountDiv.textContent = `$${formattedAmount}`;
         
-        div.innerHTML = `
-            <div class="transaction-details">
-                <div class="transaction-name">${this.escapeHtml(transaction.itemName)}</div>
-                <div class="transaction-meta">
-                    <span class="transaction-category">${this.escapeHtml(transaction.category)}</span>
-                    <span class="transaction-timestamp">${formattedTimestamp}</span>
-                </div>
-            </div>
-            <div class="transaction-amount ${amountClass}">$${formattedAmount}</div>
-            <button class="btn btn-danger transaction-delete" data-id="${transaction.id}" aria-label="Delete transaction">Delete</button>
-        `;
+        // Create delete button with proper accessibility
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'btn btn-danger transaction-delete';
+        deleteButton.setAttribute('data-id', transaction.id);
+        deleteButton.setAttribute('aria-label', `Delete transaction: ${transaction.itemName}`);
+        deleteButton.textContent = 'Delete';
+        
+        // Assemble the structure
+        metaDiv.appendChild(categorySpan);
+        metaDiv.appendChild(timestampSpan);
+        detailsDiv.appendChild(nameDiv);
+        detailsDiv.appendChild(metaDiv);
+        
+        div.appendChild(detailsDiv);
+        div.appendChild(amountDiv);
+        div.appendChild(deleteButton);
         
         return div;
     }
@@ -1054,11 +1112,12 @@ class UIController {
     }
     
     /**
-     * Show notification message
+     * Show notification message with optional screen reader announcement
      * @param {string} message - Notification message to display
      * @param {string} type - Notification type ('success' or 'warning')
+     * @param {boolean} announce - Whether to announce to screen readers
      */
-    static showNotification(message, type = 'success') {
+    static showNotification(message, type = 'success', announce = true) {
         if (!this.elements.notificationBanner) {
             return;
         }
@@ -1071,6 +1130,12 @@ class UIController {
         // Add type-specific class
         this.elements.notificationBanner.classList.add(type);
         this.elements.notificationBanner.classList.add('visible');
+        
+        // For screen reader announcements
+        if (announce) {
+            this.elements.notificationBanner.setAttribute('aria-live', 'polite');
+            this.elements.notificationBanner.setAttribute('role', 'status');
+        }
         
         // Auto-hide after 3 seconds (or 5 seconds for warnings)
         const duration = type === 'warning' ? 5000 : 3000;
@@ -1112,8 +1177,15 @@ class UIController {
      */
     static showFieldError(field, message) {
         const errorElement = document.getElementById(`${field}Error`);
+        const inputElement = document.getElementById(field);
+        
         if (errorElement) {
             errorElement.textContent = message;
+        }
+        
+        // Update aria-invalid for accessibility
+        if (inputElement) {
+            inputElement.setAttribute('aria-invalid', 'true');
         }
     }
     
@@ -1126,6 +1198,12 @@ class UIController {
                 el.textContent = '';
             });
         }
+        
+        // Reset aria-invalid for all form inputs
+        const formInputs = document.querySelectorAll('input[aria-invalid], select[aria-invalid]');
+        formInputs.forEach(input => {
+            input.setAttribute('aria-invalid', 'false');
+        });
     }
     
     /**
@@ -1212,6 +1290,105 @@ class UIController {
     }
     
     // ============================================
+    // Keyboard Navigation & Accessibility Methods
+    // ============================================
+    
+    /**
+     * Handle global keyboard navigation
+     * @param {KeyboardEvent} event - Keyboard event
+     */
+    static handleGlobalKeyboard(event) {
+        // Escape key - close any active modals or clear form focus
+        if (event.key === 'Escape') {
+            // Clear focus from inputs
+            if (document.activeElement && (
+                document.activeElement.tagName === 'INPUT' || 
+                document.activeElement.tagName === 'SELECT' ||
+                document.activeElement.tagName === 'BUTTON'
+            )) {
+                document.activeElement.blur();
+            }
+        }
+    }
+    
+    /**
+     * Handle keyboard navigation in transaction list
+     * @param {KeyboardEvent} event - Keyboard event
+     */
+    static handleTransactionListKeyboard(event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+            // If focused on a delete button, trigger click
+            if (event.target.classList.contains('transaction-delete')) {
+                event.preventDefault();
+                event.target.click();
+            }
+        }
+    }
+    
+    /**
+     * Handle keyboard navigation in budget management
+     * @param {KeyboardEvent} event - Keyboard event
+     */
+    static handleBudgetKeyboard(event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+            // If focused on a budget button, trigger click
+            if (event.target.classList.contains('budget-delete') || event.target.id === 'setBudgetBtn') {
+                event.preventDefault();
+                event.target.click();
+            }
+        }
+    }
+    
+    /**
+     * Setup form validation with accessibility features
+     */
+    static setupFormValidation() {
+        // Transaction form inputs
+        const transactionInputs = ['itemName', 'amount', 'category'];
+        transactionInputs.forEach(inputId => {
+            const input = document.getElementById(inputId);
+            if (input) {
+                input.addEventListener('input', () => this.updateAriaInvalid(input));
+                input.addEventListener('blur', () => this.updateAriaInvalid(input));
+            }
+        });
+        
+        // Category input
+        if (this.elements.newCategoryName) {
+            this.elements.newCategoryName.addEventListener('input', () => this.updateAriaInvalid(this.elements.newCategoryName));
+            this.elements.newCategoryName.addEventListener('blur', () => this.updateAriaInvalid(this.elements.newCategoryName));
+        }
+    }
+    
+    /**
+     * Update aria-invalid attribute based on field validation
+     * @param {HTMLElement} input - Input element to validate
+     */
+    static updateAriaInvalid(input) {
+        if (!input) return;
+        
+        const value = input.value;
+        const errorElement = document.getElementById(`${input.id}Error`);
+        
+        // Simple client-side validation for immediate feedback
+        let isValid = true;
+        
+        if (input.hasAttribute('aria-required') && input.getAttribute('aria-required') === 'true') {
+            if (!value || value.trim() === '') {
+                isValid = false;
+            }
+        }
+        
+        // Update aria-invalid
+        input.setAttribute('aria-invalid', isValid ? 'false' : 'true');
+        
+        // Update error element visibility for screen readers
+        if (errorElement && !isValid && value.length > 0) {
+            errorElement.setAttribute('aria-live', 'polite');
+        }
+    }
+
+    // ============================================
     // Event Handlers
     // ============================================
     
@@ -1252,7 +1429,7 @@ class UIController {
     /**
      * Handle transaction form submission
      */
-    static handleTransactionSubmit(event) {
+    static async handleTransactionSubmit(event) {
         event.preventDefault();
         
         // Clear previous errors
@@ -1263,6 +1440,9 @@ class UIController {
         const amount = this.elements.amount?.value || '';
         const category = this.elements.category?.value || '';
         
+        // Get submit button for loading state
+        const submitButton = event.target.querySelector('button[type="submit"]');
+        
         // Validate inputs
         const validation = Validator.validateTransaction(itemName, amount, category);
         if (!validation.isValid) {
@@ -1270,36 +1450,51 @@ class UIController {
             return;
         }
         
-        // Create and add transaction
-        const numAmount = parseFloat(amount);
-        const newTransaction = TransactionManager.addTransaction(itemName, numAmount, category);
-        appState.transactions.push(newTransaction);
-        
-        // Save to storage and handle errors gracefully
-        let saveSuccess = true;
-        if (appState.isStorageAvailable) {
-            saveSuccess = StorageManager.saveState(appState);
-            if (!saveSuccess) {
-                this.showError('Failed to save transaction to storage. Transaction is available for this session only.');
+        try {
+            // Show loading state on submit button
+            this.setLoading(submitButton, true, 'Adding...');
+            
+            // Simulate async operation for visual feedback
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // Create and add transaction
+            const numAmount = parseFloat(amount);
+            const newTransaction = TransactionManager.addTransaction(itemName, numAmount, category);
+            appState.transactions.push(newTransaction);
+            
+            // Save to storage and handle errors gracefully
+            let saveSuccess = true;
+            if (appState.isStorageAvailable) {
+                saveSuccess = StorageManager.saveState(appState);
+                if (!saveSuccess) {
+                    this.showError('Failed to save transaction to storage. Transaction is available for this session only.');
+                }
             }
-        }
-        
-        // Update UI (coordinated updates)
-        this.updateAfterTransactionChange();
-        
-        // Clear form
-        this.clearForm();
-        
-        // Show success notification
-        if (saveSuccess || !appState.isStorageAvailable) {
-            this.showNotification('Transaction added successfully');
+            
+            // Update UI (coordinated updates)
+            this.updateAfterTransactionChange();
+            
+            // Clear form
+            this.clearForm();
+            
+            // Show success notification
+            if (saveSuccess || !appState.isStorageAvailable) {
+                this.showNotification('Transaction added successfully', 'success');
+            }
+            
+        } catch (error) {
+            this.showError('Failed to add transaction. Please try again.');
+            console.error('Transaction submission error:', error);
+        } finally {
+            // Always remove loading state
+            this.setLoading(submitButton, false);
         }
     }
     
     /**
      * Handle transaction deletion (event delegation)
      */
-    static handleTransactionDelete(event) {
+    static async handleTransactionDelete(event) {
         // Check if delete button was clicked
         if (!event.target.classList.contains('transaction-delete')) {
             return;
@@ -1318,36 +1513,60 @@ class UIController {
             return;
         }
         
-        // Confirm flow - delete transaction (Requirements 3.3, 3.4)
-        const success = TransactionManager.deleteTransaction(transactionId, appState.transactions);
+        const deleteButton = event.target;
+        const transactionItem = deleteButton.closest('.transaction-item');
         
-        if (success) {
-            // Save to storage and handle errors gracefully (Requirement 3.8)
-            let saveSuccess = true;
-            if (appState.isStorageAvailable) {
-                saveSuccess = StorageManager.saveState(appState);
-                if (!saveSuccess) {
-                    this.showError('Failed to save deletion to storage. Change is available for this session only.');
+        try {
+            // Show loading state on delete button and transaction item
+            this.setLoading(deleteButton, true, 'Deleting...');
+            if (transactionItem) {
+                transactionItem.classList.add('loading');
+            }
+            
+            // Simulate async operation for visual feedback
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // Confirm flow - delete transaction (Requirements 3.3, 3.4)
+            const success = TransactionManager.deleteTransaction(transactionId, appState.transactions);
+            
+            if (success) {
+                // Save to storage and handle errors gracefully (Requirement 3.8)
+                let saveSuccess = true;
+                if (appState.isStorageAvailable) {
+                    saveSuccess = StorageManager.saveState(appState);
+                    if (!saveSuccess) {
+                        this.showError('Failed to save deletion to storage. Change is available for this session only.');
+                    }
                 }
+                
+                // Update UI (coordinated updates)
+                this.updateAfterTransactionChange();
+                
+                // Show success notification
+                if (saveSuccess || !appState.isStorageAvailable) {
+                    this.showNotification('Transaction deleted successfully', 'success');
+                }
+            } else {
+                this.showError('Failed to delete transaction');
             }
-            
-            // Update UI (coordinated updates)
-            this.updateAfterTransactionChange();
-            
-            // Show success notification
-            if (saveSuccess || !appState.isStorageAvailable) {
-                this.showNotification('Transaction deleted successfully');
+        } catch (error) {
+            this.showError('Failed to delete transaction. Please try again.');
+            console.error('Transaction deletion error:', error);
+        } finally {
+            // Always remove loading states
+            this.setLoading(deleteButton, false);
+            if (transactionItem) {
+                transactionItem.classList.remove('loading');
             }
-        } else {
-            this.showError('Failed to delete transaction');
         }
     }
     
     /**
      * Handle adding a new category
      */
-    static handleAddCategory() {
+    static async handleAddCategory() {
         const categoryError = document.getElementById('categoryManagementError');
+        const addCategoryBtn = document.getElementById('addCategoryBtn');
         
         if (!this.elements.newCategoryName || !categoryError) {
             return;
@@ -1372,29 +1591,43 @@ class UIController {
             return;
         }
         
-        // Add category (Requirement 5.2)
-        appState.categories = CategoryManager.addCategory(validation.sanitizedName, appState.categories);
-        
-        // Save to storage (Requirement 5.5)
-        let saveSuccess = true;
-        if (appState.isStorageAvailable) {
-            saveSuccess = StorageManager.saveState(appState);
-            if (!saveSuccess) {
-                this.showError('Failed to save category to storage. Category is available for this session only.');
+        try {
+            // Show loading state on add button
+            this.setLoading(addCategoryBtn, true, 'Adding...');
+            
+            // Simulate async operation for visual feedback
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // Add category (Requirement 5.2)
+            appState.categories = CategoryManager.addCategory(validation.sanitizedName, appState.categories);
+            
+            // Save to storage (Requirement 5.5)
+            let saveSuccess = true;
+            if (appState.isStorageAvailable) {
+                saveSuccess = StorageManager.saveState(appState);
+                if (!saveSuccess) {
+                    this.showError('Failed to save category to storage. Category is available for this session only.');
+                }
             }
-        }
-        
-        // Update UI (Requirement 5.6)
-        populateCategoryDropdown();
-        renderCategoryManagement();
-        renderBudgetManagement();
-        
-        // Clear input
-        this.elements.newCategoryName.value = '';
-        
-        // Show success notification
-        if (saveSuccess || !appState.isStorageAvailable) {
-            this.showNotification(`Category "${validation.sanitizedName}" added successfully`);
+            
+            // Update UI (Requirement 5.6)
+            populateCategoryDropdown();
+            renderCategoryManagement();
+            renderBudgetManagement();
+            
+            // Clear input
+            this.elements.newCategoryName.value = '';
+            
+            // Show success notification
+            if (saveSuccess || !appState.isStorageAvailable) {
+                this.showNotification(`Category "${validation.sanitizedName}" added successfully`, 'success');
+            }
+        } catch (error) {
+            this.showError('Failed to add category. Please try again.');
+            console.error('Category addition error:', error);
+        } finally {
+            // Always remove loading state
+            this.setLoading(addCategoryBtn, false);
         }
     }
     
@@ -1524,13 +1757,23 @@ class UIController {
     }
     
     /**
-     * Update theme toggle button icon
+     * Update theme toggle button icon and accessibility label
      */
     static updateThemeIcon(theme) {
         const themeIcon = document.querySelector('#themeToggle .theme-icon');
+        const themeButton = document.getElementById('themeToggle');
+        
         if (themeIcon) {
             // Use sun icon for light theme, moon icon for dark theme
             themeIcon.textContent = theme === 'light' ? '🌙' : '☀️';
+        }
+        
+        // Update aria-label for better accessibility
+        if (themeButton) {
+            const newLabel = theme === 'light' 
+                ? 'Switch to dark theme' 
+                : 'Switch to light theme';
+            themeButton.setAttribute('aria-label', newLabel);
         }
     }
     
@@ -1562,12 +1805,123 @@ class UIController {
     }
     
     /**
-     * Escape HTML to prevent XSS
+     * Set loading state for elements
+     * Shows loading indicators for operations >100ms
+     * @param {HTMLElement|string} element - Element or element ID
+     * @param {boolean} isLoading - Whether to show or hide loading state
+     * @param {string} loadingText - Optional loading text to display
      */
-    static escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    static setLoading(element, isLoading, loadingText = '') {
+        let targetElement = element;
+        
+        // Handle element ID strings
+        if (typeof element === 'string') {
+            targetElement = document.getElementById(element);
+        }
+        
+        if (!targetElement) return;
+        
+        if (isLoading) {
+            // Add loading class
+            targetElement.classList.add('loading');
+            
+            // Add loading spinner to buttons
+            if (targetElement.tagName === 'BUTTON' || targetElement.classList.contains('btn')) {
+                this.addLoadingSpinner(targetElement, loadingText);
+            }
+            
+            // Add loading overlay to forms
+            if (targetElement.tagName === 'FORM' || targetElement.classList.contains('form')) {
+                targetElement.classList.add('form-loading');
+            }
+        } else {
+            // Remove loading class
+            targetElement.classList.remove('loading', 'form-loading');
+            
+            // Remove loading spinner from buttons
+            if (targetElement.tagName === 'BUTTON' || targetElement.classList.contains('btn')) {
+                this.removeLoadingSpinner(targetElement);
+            }
+        }
+    }
+    
+    /**
+     * Add loading spinner to button
+     * @param {HTMLElement} button - Button element
+     * @param {string} loadingText - Optional loading text
+     */
+    static addLoadingSpinner(button, loadingText = '') {
+        if (!button.dataset.originalText) {
+            button.dataset.originalText = button.textContent;
+        }
+        
+        const spinner = document.createElement('span');
+        spinner.className = 'loading-spinner';
+        spinner.setAttribute('aria-hidden', 'true');
+        
+        const text = loadingText || button.dataset.originalText;
+        button.innerHTML = '';
+        button.appendChild(spinner);
+        button.appendChild(document.createTextNode(text));
+        
+        // Update aria-label for accessibility
+        button.setAttribute('aria-busy', 'true');
+    }
+    
+    /**
+     * Remove loading spinner from button
+     * @param {HTMLElement} button - Button element
+     */
+    static removeLoadingSpinner(button) {
+        if (button.dataset.originalText) {
+            button.textContent = button.dataset.originalText;
+            delete button.dataset.originalText;
+        }
+        
+        // Remove aria-busy for accessibility
+        button.removeAttribute('aria-busy');
+    }
+    
+    /**
+     * Show loading state with automatic timing
+     * Automatically shows loading for operations that take >100ms
+     * @param {Function} operation - Async operation to perform
+     * @param {HTMLElement|string} element - Element to show loading on
+     * @param {string} loadingText - Optional loading text
+     */
+    static async showLoadingIfNeeded(operation, element, loadingText = '') {
+        const startTime = performance.now();
+        let loadingShown = false;
+        
+        // Set a timeout to show loading after 100ms
+        const loadingTimeout = setTimeout(() => {
+            this.setLoading(element, true, loadingText);
+            loadingShown = true;
+        }, 100);
+        
+        try {
+            const result = await operation();
+            
+            // Clear the timeout
+            clearTimeout(loadingTimeout);
+            
+            // If loading was shown, hide it
+            if (loadingShown) {
+                this.setLoading(element, false);
+            }
+            
+            const duration = performance.now() - startTime;
+            console.log(`Operation completed in ${duration.toFixed(2)}ms`);
+            
+            return result;
+        } catch (error) {
+            // Clear timeout and hide loading on error
+            clearTimeout(loadingTimeout);
+            if (loadingShown) {
+                this.setLoading(element, false);
+            }
+            throw error;
+        }
     }
 }
 
@@ -1645,13 +1999,19 @@ function populateCategoryDropdown() {
     if (!categorySelect) return;
     
     // Clear existing options except the first one
-    categorySelect.innerHTML = '<option value="">-- Select Category --</option>';
+    categorySelect.innerHTML = '';
     
-    // Add category options
+    // Add default option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = '-- Select Category --';
+    categorySelect.appendChild(defaultOption);
+    
+    // Add category options using textContent for security
     appState.categories.forEach(category => {
         const option = document.createElement('option');
         option.value = category;
-        option.textContent = category;
+        option.textContent = category; // Use textContent instead of innerHTML
         categorySelect.appendChild(option);
     });
 }
@@ -1669,6 +2029,9 @@ function renderCategoryManagement() {
     const maxCount = CategoryManager.MAX_CATEGORIES;
     const isLimitReached = CategoryManager.isLimitReached(appState.categories);
     
+    // Clear existing content
+    categoryList.innerHTML = '';
+    
     // Build category count display
     const countDisplay = document.createElement('div');
     countDisplay.className = 'category-count';
@@ -1677,16 +2040,18 @@ function renderCategoryManagement() {
     // Build category tags
     const tagsContainer = document.createElement('div');
     tagsContainer.className = 'category-tags-container';
+    tagsContainer.setAttribute('role', 'list');
+    tagsContainer.setAttribute('aria-label', 'Current categories');
     
     appState.categories.forEach(category => {
         const tag = document.createElement('span');
         tag.className = 'category-tag';
-        tag.textContent = category;
+        tag.setAttribute('role', 'listitem');
+        tag.textContent = category; // Use textContent instead of innerHTML for security
         tagsContainer.appendChild(tag);
     });
     
-    // Clear and update category list
-    categoryList.innerHTML = '';
+    // Assemble category list
     categoryList.appendChild(countDisplay);
     categoryList.appendChild(tagsContainer);
     
@@ -1695,6 +2060,7 @@ function renderCategoryManagement() {
     if (addCategoryBtn) {
         if (isLimitReached) {
             addCategoryBtn.disabled = true;
+            addCategoryBtn.setAttribute('aria-disabled', 'true');
             
             // Show limit message
             const categoryError = document.getElementById('categoryManagementError');
@@ -1703,6 +2069,7 @@ function renderCategoryManagement() {
             }
         } else {
             addCategoryBtn.disabled = false;
+            addCategoryBtn.setAttribute('aria-disabled', 'false');
             
             // Clear any limit message
             const categoryError = document.getElementById('categoryManagementError');
@@ -1727,32 +2094,88 @@ function renderBudgetManagement() {
     // Get exceeded categories
     const exceededCategories = BudgetManager.getExceededCategories(spendingByCategory, appState.budgetLimits);
     
-    // Build budget setting form
-    let html = `
-        <div class="budget-form">
-            <div class="form-group">
-                <label for="budgetCategory">Category</label>
-                <select id="budgetCategory" name="budgetCategory">
-                    <option value="">-- Select Category --</option>
-                    ${appState.categories.map(cat => `<option value="${UIController.escapeHtml(cat)}">${UIController.escapeHtml(cat)}</option>`).join('')}
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="budgetAmount">Budget Limit</label>
-                <input 
-                    type="number" 
-                    id="budgetAmount" 
-                    name="budgetAmount"
-                    step="0.01"
-                    min="0.01"
-                    placeholder="e.g., 500.00"
-                >
-            </div>
-            <button id="setBudgetBtn" class="btn btn-primary">Set Budget</button>
-            <span id="budgetError" class="error-message" role="alert"></span>
-        </div>
-        <div class="budget-items-list">
-    `;
+    // Clear existing content
+    budgetList.innerHTML = '';
+    
+    // Create budget setting form
+    const formDiv = document.createElement('div');
+    formDiv.className = 'budget-form';
+    
+    // Category selection
+    const categoryGroup = document.createElement('div');
+    categoryGroup.className = 'form-group';
+    
+    const categoryLabel = document.createElement('label');
+    categoryLabel.setAttribute('for', 'budgetCategory');
+    categoryLabel.textContent = 'Category';
+    
+    const categorySelect = document.createElement('select');
+    categorySelect.id = 'budgetCategory';
+    categorySelect.name = 'budgetCategory';
+    categorySelect.setAttribute('aria-required', 'true');
+    categorySelect.setAttribute('aria-describedby', 'budgetError');
+    
+    // Add default option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = '-- Select Category --';
+    categorySelect.appendChild(defaultOption);
+    
+    // Add category options using textContent for security
+    appState.categories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category; // Use textContent instead of innerHTML
+        categorySelect.appendChild(option);
+    });
+    
+    // Amount input
+    const amountGroup = document.createElement('div');
+    amountGroup.className = 'form-group';
+    
+    const amountLabel = document.createElement('label');
+    amountLabel.setAttribute('for', 'budgetAmount');
+    amountLabel.textContent = 'Budget Limit';
+    
+    const amountInput = document.createElement('input');
+    amountInput.type = 'number';
+    amountInput.id = 'budgetAmount';
+    amountInput.name = 'budgetAmount';
+    amountInput.step = '0.01';
+    amountInput.min = '0.01';
+    amountInput.placeholder = 'e.g., 500.00';
+    amountInput.setAttribute('aria-required', 'true');
+    amountInput.setAttribute('aria-describedby', 'budgetError');
+    
+    // Set budget button
+    const setBudgetBtn = document.createElement('button');
+    setBudgetBtn.id = 'setBudgetBtn';
+    setBudgetBtn.className = 'btn btn-primary';
+    setBudgetBtn.textContent = 'Set Budget';
+    setBudgetBtn.setAttribute('aria-describedby', 'budgetError');
+    
+    // Error message
+    const errorSpan = document.createElement('span');
+    errorSpan.id = 'budgetError';
+    errorSpan.className = 'error-message';
+    errorSpan.setAttribute('role', 'alert');
+    errorSpan.setAttribute('aria-live', 'polite');
+    
+    // Assemble form
+    categoryGroup.appendChild(categoryLabel);
+    categoryGroup.appendChild(categorySelect);
+    amountGroup.appendChild(amountLabel);
+    amountGroup.appendChild(amountInput);
+    
+    formDiv.appendChild(categoryGroup);
+    formDiv.appendChild(amountGroup);
+    formDiv.appendChild(setBudgetBtn);
+    formDiv.appendChild(errorSpan);
+    
+    // Create budget items list
+    const itemsList = document.createElement('div');
+    itemsList.className = 'budget-items-list';
+    itemsList.setAttribute('role', 'list');
     
     // Display each category with its limit and spending
     if (appState.categories.length > 0) {
@@ -1761,30 +2184,72 @@ function renderBudgetManagement() {
             const limit = appState.budgetLimits[category];
             const hasLimit = limit !== undefined;
             const isExceeded = exceededCategories.includes(category);
-            const exceededClass = isExceeded ? 'exceeded' : '';
             
-            html += `
-                <div class="budget-item ${exceededClass}" data-category="${UIController.escapeHtml(category)}">
-                    <div class="budget-info">
-                        <div class="budget-category">${UIController.escapeHtml(category)}</div>
-                        <div class="budget-amounts">
-                            <span class="budget-spending">Spending: $${spending.toFixed(2)}</span>
-                            ${hasLimit ? `<span class="budget-limit">Limit: $${limit.toFixed(2)}</span>` : '<span class="budget-limit">No limit set</span>'}
-                        </div>
-                    </div>
-                    <div class="budget-controls">
-                        ${hasLimit ? `<button class="btn btn-danger budget-delete" data-category="${UIController.escapeHtml(category)}">Delete Limit</button>` : ''}
-                    </div>
-                </div>
-            `;
+            // Create budget item
+            const item = document.createElement('div');
+            item.className = `budget-item${isExceeded ? ' exceeded' : ''}`;
+            item.setAttribute('data-category', category);
+            item.setAttribute('role', 'listitem');
+            
+            // Budget info container
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'budget-info';
+            
+            // Category name - use textContent for security
+            const categoryDiv = document.createElement('div');
+            categoryDiv.className = 'budget-category';
+            categoryDiv.textContent = category; // Use textContent instead of innerHTML
+            
+            // Budget amounts
+            const amountsDiv = document.createElement('div');
+            amountsDiv.className = 'budget-amounts';
+            
+            const spendingSpan = document.createElement('span');
+            spendingSpan.className = 'budget-spending';
+            spendingSpan.textContent = `Spending: $${spending.toFixed(2)}`;
+            
+            const limitSpan = document.createElement('span');
+            limitSpan.className = 'budget-limit';
+            limitSpan.textContent = hasLimit ? `Limit: $${limit.toFixed(2)}` : 'No limit set';
+            
+            amountsDiv.appendChild(spendingSpan);
+            amountsDiv.appendChild(limitSpan);
+            
+            infoDiv.appendChild(categoryDiv);
+            infoDiv.appendChild(amountsDiv);
+            
+            // Budget controls
+            const controlsDiv = document.createElement('div');
+            controlsDiv.className = 'budget-controls';
+            
+            if (hasLimit) {
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn btn-danger budget-delete';
+                deleteBtn.setAttribute('data-category', category);
+                deleteBtn.setAttribute('aria-label', `Delete budget limit for ${category}`);
+                deleteBtn.textContent = 'Delete Limit';
+                controlsDiv.appendChild(deleteBtn);
+            }
+            
+            item.appendChild(infoDiv);
+            item.appendChild(controlsDiv);
+            
+            itemsList.appendChild(item);
         });
     } else {
-        html += '<div class="empty-state">No categories available. Add categories first.</div>';
+        const emptyState = document.createElement('div');
+        emptyState.className = 'empty-state';
+        emptyState.textContent = 'No categories available. Add categories first.';
+        itemsList.appendChild(emptyState);
     }
     
-    html += '</div>';
+    // Assemble final structure
+    budgetList.appendChild(formDiv);
+    budgetList.appendChild(itemsList);
     
-    budgetList.innerHTML = html;
+    // Update cached elements for new form inputs
+    UIController.elements.budgetCategory = categorySelect;
+    UIController.elements.budgetAmount = amountInput;
 }
 
 // Initialize app when DOM is ready
