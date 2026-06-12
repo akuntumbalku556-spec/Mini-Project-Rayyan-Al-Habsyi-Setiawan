@@ -1,6 +1,5 @@
 {
   "name": "expense-budget-visualizer",
   "version": "1.0.0",
-  "description": "Expense & Budget Visualizer - Client-side expense tracking application",
-  "type": "module"
+  "description": "Expense & Budget Visualizer - Client-side expense tracking application"
 }

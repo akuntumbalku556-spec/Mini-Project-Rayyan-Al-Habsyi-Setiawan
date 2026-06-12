@@ -1,6 +1,143 @@
 'use strict';
 
 // ============================================
+// Error Handler
+// Categorizes, logs, and displays errors to the user
+// Requirements: 2.6, 3.8, 9.6, 9.7
+// ============================================
+
+class ErrorHandler {
+    // Error category constants
+    static CATEGORY = {
+        VALIDATION: 'validation',
+        STORAGE: 'storage',
+        DATA_CORRUPTION: 'data_corruption',
+        PERFORMANCE: 'performance'
+    };
+
+    /**
+     * Global error handler — determines category, logs, and displays the error.
+     * @param {Error} error - The error object
+     * @param {string} context - Human-readable description of where the error occurred
+     */
+    static handleError(error, context) {
+        this.logError(error, context);
+
+        // Determine category and appropriate user message
+        if (error.name === 'QuotaExceededError') {
+            // Storage quota exceeded — treat as storage error
+            this.displayError(
+                'Local storage is unavailable. Data will not be saved.',
+                'warning'
+            );
+        } else if (error instanceof SyntaxError) {
+            // JSON parse failure — treat as data corruption
+            this.displayError(
+                'Unable to load saved data',
+                'error'
+            );
+        } else if (
+            error.name === 'SecurityError' ||
+            (error.message && error.message.toLowerCase().includes('localstorage'))
+        ) {
+            // Storage access denied / unavailable
+            this.displayError(
+                'Local storage is unavailable. Data will not be saved.',
+                'warning'
+            );
+        } else {
+            // Generic / unknown error
+            this.displayError(
+                `An error occurred (${context}). Please try again.`,
+                'error'
+            );
+        }
+    }
+
+    /**
+     * Dedicated storage error handler.
+     * Displays the appropriate storage-specific message (Requirement 9.7).
+     * @param {Error} error - Storage-related error object
+     */
+    static handleStorageError(error) {
+        this.logError(error, ErrorHandler.CATEGORY.STORAGE);
+
+        if (error instanceof SyntaxError) {
+            // Malformed / corrupted data (Requirement 9.6)
+            this.displayError('Unable to load saved data', 'error');
+        } else {
+            // Storage unavailable: quota exceeded, SecurityError, etc. (Requirement 9.7)
+            this.displayError(
+                'Local storage is unavailable. Data will not be saved.',
+                'warning'
+            );
+        }
+    }
+
+    /**
+     * Display a user-friendly error message with appropriate severity styling.
+     * Uses UIController's banner elements; falls back to console if UIController
+     * is not yet ready. Uses textContent to prevent XSS.
+     * @param {string} message - User-facing error message
+     * @param {'error'|'warning'|'info'} severity - Severity level
+     */
+    static displayError(message, severity = 'error') {
+        // Delegate to UIController when available
+        if (typeof UIController !== 'undefined' && UIController.elements) {
+            if (severity === 'error') {
+                // Use the error banner for errors
+                const errorBanner = UIController.elements.errorBanner ||
+                    document.getElementById('errorBanner');
+                if (errorBanner) {
+                    errorBanner.textContent = message; // textContent — no XSS risk
+                    errorBanner.classList.add('visible');
+                    setTimeout(() => errorBanner.classList.remove('visible'), 5000);
+                    return;
+                }
+            } else {
+                // Use the notification banner for warnings / info
+                const notificationBanner = UIController.elements.notificationBanner ||
+                    document.getElementById('notificationBanner');
+                if (notificationBanner) {
+                    notificationBanner.textContent = message; // textContent — no XSS risk
+                    notificationBanner.classList.remove('success', 'warning', 'info');
+                    notificationBanner.classList.add(severity);
+                    notificationBanner.classList.add('visible');
+                    const duration = severity === 'warning' ? 5000 : 3000;
+                    setTimeout(() => notificationBanner.classList.remove('visible'), duration);
+                    return;
+                }
+            }
+        }
+
+        // Fallback: try raw DOM access (e.g., before UIController is initialised)
+        const errorBanner = document.getElementById('errorBanner');
+        if (errorBanner) {
+            errorBanner.textContent = message;
+            errorBanner.classList.add('visible');
+            setTimeout(() => errorBanner.classList.remove('visible'), 5000);
+            return;
+        }
+
+        // Last resort: browser console
+        console.error(`[ErrorHandler][${severity}] ${message}`);
+    }
+
+    /**
+     * Log error details to the console for debugging.
+     * @param {Error} error - The error object
+     * @param {string} context - Where the error occurred
+     */
+    static logError(error, context) {
+        console.error(`[ErrorHandler] Context: ${context}`, {
+            name: error.name,
+            message: error.message,
+            stack: error.stack || '(no stack trace)'
+        });
+    }
+}
+
+// ============================================
 // Storage Manager
 // Handles all Local Storage interactions with error handling and fallback behavior
 // ============================================
@@ -110,20 +247,12 @@ class StorageManager {
     }
     
     /**
-     * Handle storage errors
+     * Handle storage errors — delegates to ErrorHandler for consistent error handling
      * @param {Error} error - Error object
      */
     static handleStorageError(error) {
-        console.error('Storage error:', error);
-        
-        // Display error message to user based on error type
-        if (error.name === 'QuotaExceededError') {
-            UIController.showError('Local storage quota exceeded. Data will not be saved.');
-        } else if (error instanceof SyntaxError) {
-            UIController.showError('Unable to load saved data - data is corrupted.');
-        } else {
-            UIController.showError('Local storage is unavailable. Data will not be saved.');
-        }
+        // Delegate to ErrorHandler for categorised logging and user-friendly display
+        ErrorHandler.handleStorageError(error);
     }
 }
 
@@ -1949,7 +2078,8 @@ function initApp() {
     appState.isStorageAvailable = StorageManager.isAvailable();
     
     if (!appState.isStorageAvailable) {
-        UIController.showError('Local storage is unavailable. Data will not be saved.');
+        // Use ErrorHandler for consistent storage unavailability message (Requirement 9.7)
+        ErrorHandler.displayError('Local storage is unavailable. Data will not be saved.', 'warning');
     }
     
     // Load saved state
